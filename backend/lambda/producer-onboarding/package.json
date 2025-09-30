@@ -1,0 +1,23 @@
+{
+  "name": "producer-onboarding",
+  "version": "1.0.0",
+  "description": "Lambda function for producer onboarding",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc && npm run package",
+    "package": "cd dist && zip -r ../producer-onboarding.zip . && cd ..",
+    "deploy": "aws lambda update-function-code --function-name producer-onboarding --zip-file fileb://producer-onboarding.zip"
+  },
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.600.0",
+    "@aws-sdk/client-ses": "^3.600.0",
+    "pg": "^8.12.0",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.138",
+    "@types/node": "^20.14.9",
+    "@types/pg": "^8.11.6",
+    "typescript": "^5.5.3"
+  }
+}

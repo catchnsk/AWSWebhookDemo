@@ -1,0 +1,24 @@
+{
+  "name": "webhook-register",
+  "version": "1.0.0",
+  "description": "Lambda function for webhook registration",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc && npm run package",
+    "package": "cd dist && zip -r ../webhook-register.zip . && cd ..",
+    "deploy": "aws lambda update-function-code --function-name webhook-register --zip-file fileb://webhook-register.zip"
+  },
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.600.0",
+    "ajv": "^8.12.0",
+    "ajv-formats": "^3.0.1",
+    "pg": "^8.12.0",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.138",
+    "@types/node": "^20.14.9",
+    "@types/pg": "^8.11.6",
+    "typescript": "^5.5.3"
+  }
+}

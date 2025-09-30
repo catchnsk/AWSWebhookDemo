@@ -1,0 +1,24 @@
+{
+  "name": "delivery-consumer",
+  "version": "1.0.0",
+  "description": "Lambda function for webhook delivery from Kafka",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc && npm run package",
+    "package": "cd dist && zip -r ../delivery-consumer.zip . && cd ..",
+    "deploy": "aws lambda update-function-code --function-name delivery-consumer --zip-file fileb://delivery-consumer.zip"
+  },
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.600.0",
+    "axios": "^1.7.2",
+    "kafkajs": "^2.2.4",
+    "pg": "^8.12.0",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.138",
+    "@types/node": "^20.14.9",
+    "@types/pg": "^8.11.6",
+    "typescript": "^5.5.3"
+  }
+}
