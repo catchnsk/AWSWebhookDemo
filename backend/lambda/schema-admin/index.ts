@@ -1,5 +1,5 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { createSchema, getSchemaById, listSchemas, listPublicSchemas } from '../../shared/models/schema';
+import { createSchema, getSchemaById, listSchemas, listPublicSchemas, updateSchema } from '../../shared/models/schema';
 import { getProducerByApiKey, incrementSchemaRegisteredCount } from '../../shared/models/producer';
 import { registerSchema, validateAgainstSchema } from '../../shared/utils/schemaRegistry';
 import { successResponse, ErrorResponses, corsPreflightResponse, paginatedResponse } from '../../shared/utils/response';
@@ -28,26 +28,31 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     const method = event.httpMethod;
     const resource = event.resource;
+    const path = event.path;
 
-    // Route based on method and resource
-    if (method === 'POST' && resource === '/schemas/register') {
+    // Route based on method and resource/path
+    if (method === 'POST' && (resource === '/schemas/register' || path === '/api/v1/schemas/register')) {
       return await handleRegisterSchema(event);
     }
 
-    if (method === 'GET' && resource === '/schemas') {
+    if (method === 'GET' && (resource === '/schemas' || path === '/api/v1/schemas')) {
       return await handleListSchemas(event);
     }
 
-    if (method === 'GET' && resource === '/schemas/marketplace') {
+    if (method === 'GET' && (resource === '/schemas/marketplace' || path === '/api/v1/schemas/marketplace')) {
       return await handleListMarketplace(event);
     }
 
-    if (method === 'GET' && resource === '/schemas/{schemaId}') {
+    if (method === 'GET' && (resource === '/schemas/{schemaId}' || path.includes('/api/v1/schemas/'))) {
       return await handleGetSchema(event);
     }
 
-    if (method === 'POST' && resource === '/schemas/{schemaId}/validate') {
+    if (method === 'POST' && (resource === '/schemas/{schemaId}/validate' || path.includes('/api/v1/schemas/') && path.includes('/validate'))) {
       return await handleValidatePayload(event);
+    }
+
+    if (method === 'PATCH' && (resource === '/admin/schemas/{schemaId}' || path.includes('/api/v1/admin/schemas/'))) {
+      return await handleUpdateSchema(event);
     }
 
     return ErrorResponses.badRequest('Invalid endpoint or method');
@@ -66,18 +71,46 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
  * Requirement 2b: Register the schema in Schema Registry
  */
 async function handleRegisterSchema(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
-  // Extract API key from Authorization header
-  const apiKey = event.headers['Authorization']?.replace('Bearer ', '');
+  // Extract API key from Authorization header or X-API-Key
+  const apiKey = event.headers['Authorization']?.replace('Bearer ', '') || event.headers['x-api-key'] || event.headers['X-API-Key'];
 
   if (!apiKey) {
     return ErrorResponses.unauthorized('API key is required');
   }
 
-  // Validate producer
-  const producer = await getProducerByApiKey(apiKey);
+  // Check if admin (admin API keys start with 'wh_admin')
+  const isAdmin = apiKey.startsWith('wh_admin');
 
-  if (!producer) {
-    return ErrorResponses.unauthorized('Invalid API key');
+  let producer;
+
+  if (isAdmin) {
+    // For admin users, create or use a default "System" producer
+    // First, try to find existing system producer
+    const { query } = await import('../../shared/utils/database');
+    const result = await query(
+      'SELECT * FROM producers WHERE name = $1 LIMIT 1',
+      ['System']
+    );
+
+    if (result.rows.length > 0) {
+      producer = result.rows[0];
+    } else {
+      // Create a system producer
+      const createResult = await query(
+        `INSERT INTO producers (name, contact_email, api_key, status)
+         VALUES ($1, $2, $3, $4)
+         RETURNING *`,
+        ['System', 'system@webhook.local', 'system_internal_key', 'active']
+      );
+      producer = createResult.rows[0];
+    }
+  } else {
+    // Validate producer
+    producer = await getProducerByApiKey(apiKey);
+
+    if (!producer) {
+      return ErrorResponses.unauthorized('Invalid API key');
+    }
   }
 
   // Parse request body
@@ -99,26 +132,34 @@ async function handleRegisterSchema(event: APIGatewayProxyEvent): Promise<APIGat
   }
 
   try {
-    // Step 1: Register schema in AWS Glue Schema Registry
-    console.log('Registering schema in Schema Registry...');
-    const registryResult = await registerSchema(
-      requestBody.name,
-      requestBody.schemaDefinition,
-      requestBody.schemaFormat || 'json',
-      requestBody.description
-    );
+    let registryResult = null;
 
-    console.log('Schema registered in Registry:', {
-      schemaArn: registryResult.schemaArn,
-      versionNumber: registryResult.versionNumber,
-    });
+    // Step 1: Register schema in AWS Glue Schema Registry (only if not in local dev)
+    const isLocalDev = process.env.NODE_ENV === 'development' || !process.env.AWS_REGION;
+
+    if (!isLocalDev) {
+      console.log('Registering schema in Schema Registry...');
+      registryResult = await registerSchema(
+        requestBody.name,
+        requestBody.schemaDefinition,
+        requestBody.schemaFormat || 'json',
+        requestBody.description
+      );
+
+      console.log('Schema registered in Registry:', {
+        schemaArn: registryResult.schemaArn,
+        versionNumber: registryResult.versionNumber,
+      });
+    } else {
+      console.log('Local development mode: Skipping AWS Schema Registry registration');
+    }
 
     // Step 2: Store schema metadata in Webhook Database
     console.log('Storing schema in Webhook DB...');
     const schema = await createSchema({
       producer_id: producer.id,
-      schema_registry_id: registryResult.schemaArn,
-      schema_registry_version: registryResult.versionNumber,
+      schema_registry_id: registryResult?.schemaArn || null,
+      schema_registry_version: registryResult?.versionNumber || null,
       name: requestBody.name,
       event_type: requestBody.eventType,
       version: requestBody.version,
@@ -129,6 +170,8 @@ async function handleRegisterSchema(event: APIGatewayProxyEvent): Promise<APIGat
       description: requestBody.description,
       documentation_url: requestBody.documentationUrl,
       example_payload: requestBody.examplePayload,
+      domain: requestBody.domain || null,
+      system_user_id: requestBody.systemUserId || null,
     });
 
     // Step 3: Increment producer's schema count
@@ -151,7 +194,9 @@ async function handleRegisterSchema(event: APIGatewayProxyEvent): Promise<APIGat
         status: schema.status,
         createdAt: schema.created_at,
       },
-      message: 'Schema registered successfully in both Schema Registry and Webhook Database',
+      message: isLocalDev
+        ? 'Schema registered successfully in Webhook Database (local development mode)'
+        : 'Schema registered successfully in both Schema Registry and Webhook Database',
     };
 
     return successResponse(response, 201);
@@ -171,23 +216,33 @@ async function handleRegisterSchema(event: APIGatewayProxyEvent): Promise<APIGat
  * Handle list schemas
  */
 async function handleListSchemas(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
-  const apiKey = event.headers['Authorization']?.replace('Bearer ', '');
+  const apiKey = event.headers['Authorization']?.replace('Bearer ', '') || event.headers['x-api-key'] || event.headers['X-API-Key'];
 
   if (!apiKey) {
     return ErrorResponses.unauthorized('API key is required');
   }
 
-  const producer = await getProducerByApiKey(apiKey);
+  // Check if admin (admin API keys start with 'wh_admin')
+  const isAdmin = apiKey.startsWith('wh_admin');
 
-  if (!producer) {
-    return ErrorResponses.unauthorized('Invalid API key');
+  let producer = null;
+  if (!isAdmin) {
+    producer = await getProducerByApiKey(apiKey);
+    if (!producer) {
+      return ErrorResponses.unauthorized('Invalid API key');
+    }
   }
 
   const params = event.queryStringParameters || {};
   const page = parseInt(params.page || '1', 10);
   const limit = parseInt(params.limit || '20', 10);
 
-  const filters: any = { producer_id: producer.id };
+  const filters: any = {};
+
+  // If not admin, filter by producer
+  if (producer) {
+    filters.producer_id = producer.id;
+  }
 
   if (params.status) filters.status = params.status;
   if (params.search) filters.search = params.search;
@@ -205,6 +260,10 @@ async function handleListSchemas(event: APIGatewayProxyEvent): Promise<APIGatewa
     totalEventsPublished: schema.total_events_published,
     status: schema.status,
     createdAt: schema.created_at,
+    schemaId: schema.schema_id,
+    domain: schema.domain,
+    partnerUserId: schema.partner_user_id,
+    systemUserId: schema.system_user_id,
   }));
 
   const response = paginatedResponse(transformedSchemas, total, page, limit);
@@ -236,6 +295,10 @@ async function handleListMarketplace(event: APIGatewayProxyEvent): Promise<APIGa
     schemaFormat: schema.schema_format,
     requiresApproval: schema.requires_approval,
     createdAt: schema.created_at,
+    schemaId: schema.schema_id,
+    domain: schema.domain,
+    partnerUserId: schema.partner_user_id,
+    systemUserId: schema.system_user_id,
   }));
 
   const response = paginatedResponse(transformedSchemas, total, page, limit);
@@ -278,6 +341,10 @@ async function handleGetSchema(event: APIGatewayProxyEvent): Promise<APIGatewayP
     status: schema.status,
     createdAt: schema.created_at,
     updatedAt: schema.updated_at,
+    schemaId: schema.schema_id,
+    domain: schema.domain,
+    partnerUserId: schema.partner_user_id,
+    systemUserId: schema.system_user_id,
   };
 
   return successResponse(response);
@@ -331,6 +398,109 @@ async function handleValidatePayload(event: APIGatewayProxyEvent): Promise<APIGa
     valid: true,
     message: 'Payload is valid according to the schema',
   });
+}
+
+/**
+ * Handle update schema (admin only)
+ */
+async function handleUpdateSchema(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
+  // Extract API key from headers
+  const apiKey = event.headers['Authorization']?.replace('Bearer ', '') || event.headers['x-api-key'] || event.headers['X-API-Key'];
+
+  if (!apiKey) {
+    return ErrorResponses.unauthorized('API key is required');
+  }
+
+  // Check if admin (admin API keys start with 'wh_admin')
+  const isAdmin = apiKey.startsWith('wh_admin');
+
+  if (!isAdmin) {
+    return ErrorResponses.unauthorized('Admin access required');
+  }
+
+  const schemaId = event.pathParameters?.schemaId;
+
+  if (!schemaId) {
+    return ErrorResponses.badRequest('Schema ID is required');
+  }
+
+  if (!event.body) {
+    return ErrorResponses.badRequest('Request body is required');
+  }
+
+  let requestBody: any;
+  try {
+    requestBody = JSON.parse(event.body);
+  } catch (error) {
+    return ErrorResponses.badRequest('Invalid JSON in request body');
+  }
+
+  // Validate schema exists
+  const schema = await getSchemaById(schemaId);
+
+  if (!schema) {
+    return ErrorResponses.notFound('Schema', schemaId);
+  }
+
+  // Update schema
+  const updateData: any = {};
+
+  if (requestBody.domain !== undefined) {
+    updateData.domain = requestBody.domain;
+  }
+
+  if (requestBody.partnerUserId !== undefined) {
+    updateData.partner_user_id = requestBody.partnerUserId;
+  }
+
+  if (requestBody.systemUserId !== undefined) {
+    updateData.system_user_id = requestBody.systemUserId;
+  }
+
+  if (requestBody.status !== undefined) {
+    updateData.status = requestBody.status;
+  }
+
+  if (requestBody.schemaDefinition !== undefined) {
+    updateData.schema_definition = requestBody.schemaDefinition;
+  }
+
+  if (requestBody.examplePayload !== undefined) {
+    updateData.example_payload = requestBody.examplePayload;
+  }
+
+  const updatedSchema = await updateSchema(schemaId, updateData);
+
+  if (!updatedSchema) {
+    return ErrorResponses.internalServerError('Failed to update schema');
+  }
+
+  const response = {
+    id: updatedSchema.id,
+    producerId: updatedSchema.producer_id,
+    schemaRegistryId: updatedSchema.schema_registry_id,
+    name: updatedSchema.name,
+    eventType: updatedSchema.event_type,
+    version: updatedSchema.version,
+    schemaFormat: updatedSchema.schema_format,
+    schemaDefinition: updatedSchema.schema_definition,
+    isPublic: updatedSchema.is_public,
+    requiresApproval: updatedSchema.requires_approval,
+    description: updatedSchema.description,
+    documentationUrl: updatedSchema.documentation_url,
+    examplePayload: updatedSchema.example_payload,
+    subscriptionCount: updatedSchema.subscription_count,
+    totalEventsPublished: updatedSchema.total_events_published,
+    status: updatedSchema.status,
+    createdAt: updatedSchema.created_at,
+    updatedAt: updatedSchema.updated_at,
+    schemaId: updatedSchema.schema_id,
+    domain: updatedSchema.domain,
+    partnerUserId: updatedSchema.partner_user_id,
+    systemUserId: updatedSchema.system_user_id,
+  };
+
+  return successResponse(response);
 }
 
 /**

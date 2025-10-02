@@ -46,20 +46,27 @@ export interface Schema {
   name: string;
   eventType: string;
   version: string;
+  schemaFormat?: string;
   schemaDefinition: any;
+  examplePayload?: any;
   isPublic: boolean;
   subscriptionCount: number;
   status: string;
   createdAt: string;
+  schemaId?: string;
+  domain?: 'payment' | 'account' | 'apply';
+  partnerUserId?: string;
+  systemUserId?: string;
 }
 
 export interface Subscriber {
   id: string;
   name: string;
   email: string;
-  webhookUrl: string;
+  webhookUrl?: string;
+  webhook_url?: string;
   status: string;
-  successCount: number;
+  successCount?: number;
   createdAt: string;
 }
 
@@ -115,6 +122,17 @@ export interface DLQEntry {
   resolved: boolean;
 }
 
+export interface AdminUser {
+  id: string;
+  name: string;
+  email: string;
+  role: 'super_admin' | 'admin' | 'viewer' | 'tester' | 'rtb';
+  status: string;
+  lastLoginAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Producer APIs
 export const producerAPI = {
   onboard: async (data: {
@@ -138,6 +156,9 @@ export const schemaAPI = {
     schemaDefinition: any;
     description?: string;
     isPublic?: boolean;
+    domain?: string;
+    systemUserId?: string;
+    examplePayload?: any;
   }): Promise<{ schema: Schema }> => {
     const response = await api.post('/schemas/register', data);
     return response.data;
@@ -145,7 +166,11 @@ export const schemaAPI = {
 
   list: async (params?: { page?: number; limit?: number }): Promise<{ schemas: Schema[]; total: number }> => {
     const response = await api.get('/schemas', { params });
-    return response.data;
+    const data = response.data.data || response.data;
+    return {
+      schemas: data.schemas || data.data || [],
+      total: data.pagination?.total || data.total || 0
+    };
   },
 
   listMarketplace: async (params?: { page?: number; limit?: number; eventType?: string }): Promise<{ schemas: Schema[]; total: number }> => {
@@ -164,10 +189,19 @@ export const schemaAPI = {
   },
 };
 
+// Subscriber APIs
+export const subscriberAPI = {
+  list: async (): Promise<{ subscribers: Subscriber[] }> => {
+    const response = await api.get('/subscribers');
+    return response.data;
+  },
+};
+
 // Subscription APIs
 export const subscriptionAPI = {
   subscribe: async (data: {
     schemaId: string;
+    subscriberId?: string;
     webhookUrl?: string;
     maxRetries?: number;
     backoffStrategy?: string;
@@ -178,7 +212,11 @@ export const subscriptionAPI = {
 
   list: async (params?: { page?: number; limit?: number }): Promise<{ subscriptions: Subscription[]; total: number }> => {
     const response = await api.get('/subscriptions', { params });
-    return response.data;
+    const data = response.data.data || response.data;
+    return {
+      subscriptions: data.subscriptions || data.data || [],
+      total: data.pagination?.total || data.total || 0
+    };
   },
 
   get: async (subscriptionId: string): Promise<{ subscription: Subscription }> => {
@@ -271,6 +309,60 @@ export const dlqAPI = {
 
   resolve: async (id: string): Promise<void> => {
     await api.post(`/admin/dlq/${id}/resolve`);
+  },
+};
+
+// Admin User APIs
+export const adminUserAPI = {
+  create: async (data: {
+    name: string;
+    email: string;
+    password: string;
+    role?: 'super_admin' | 'admin' | 'viewer' | 'tester' | 'rtb';
+  }): Promise<{ admin: AdminUser; apiKey: string; message: string }> => {
+    const response = await api.post('/admin/users', data);
+    return response.data;
+  },
+
+  list: async (params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    role?: string;
+    search?: string;
+  }): Promise<{ admins: AdminUser[]; total: number }> => {
+    const response = await api.get('/admin/users', { params });
+    return response.data.data || response.data;
+  },
+
+  get: async (userId: string): Promise<AdminUser> => {
+    const response = await api.get(`/admin/users/${userId}`);
+    return response.data;
+  },
+
+  update: async (userId: string, data: {
+    name?: string;
+    email?: string;
+    role?: 'super_admin' | 'admin' | 'viewer' | 'tester' | 'rtb';
+    status?: string;
+  }): Promise<{ admin: AdminUser; message: string }> => {
+    const response = await api.patch(`/admin/users/${userId}`, data);
+    return response.data;
+  },
+
+  delete: async (userId: string): Promise<void> => {
+    await api.delete(`/admin/users/${userId}`);
+  },
+};
+
+// Admin Auth APIs
+export const adminAuthAPI = {
+  login: async (data: {
+    email: string;
+    password: string;
+  }): Promise<{ user: { id: string; name: string; email: string; role: string; status: string }; apiKey: string; message: string }> => {
+    const response = await api.post('/admin/login', data);
+    return response.data.data || response.data;
   },
 };
 

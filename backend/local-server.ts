@@ -8,18 +8,34 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 
+// Enable CORS for local development
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
+
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
+  next();
+});
+
 // Import Lambda handlers
 import { handler as producerOnboardingHandler } from './lambda/producer-onboarding/index';
 import { handler as schemaAdminHandler } from './lambda/schema-admin/index';
 import { handler as subscriptionAdminHandler } from './lambda/subscription-admin/index';
 import { handler as eventPublisherHandler } from './lambda/event-publisher/index';
+import { handler as adminUserManagerHandler } from './lambda/admin-user-manager/index';
+import { handler as adminAuthHandler } from './lambda/admin-auth/index';
 
 /**
  * Convert Express request to API Gateway event
  */
 function createAPIGatewayEvent(req: Request): APIGatewayProxyEvent {
   return {
-    body: JSON.stringify(req.body),
+    body: req.body ? JSON.stringify(req.body) : null,
     headers: req.headers as { [name: string]: string },
     multiValueHeaders: {},
     httpMethod: req.method,
@@ -139,6 +155,43 @@ app.post('/api/v1/schemas/:schemaId/validate', async (req, res) => {
 });
 
 // ============================================================================
+// Admin Schema Routes
+// ============================================================================
+
+app.patch('/api/v1/admin/schemas/:schemaId', async (req, res) => {
+  await lambdaWrapper(schemaAdminHandler, req, res);
+});
+
+// ============================================================================
+// Subscriber Routes
+// ============================================================================
+
+app.get('/api/v1/subscribers', async (req, res) => {
+  // Return subscribers list for admins
+  const { Pool } = await import('pg');
+  const pool = new Pool({
+    host: process.env.DATABASE_HOST,
+    port: parseInt(process.env.DATABASE_PORT || '5432'),
+    database: process.env.DATABASE_NAME,
+    user: process.env.DATABASE_USER,
+    password: process.env.DATABASE_PASSWORD,
+  });
+
+  try {
+    const result = await pool.query('SELECT id, name, email, webhook_url, status, created_at FROM subscribers ORDER BY created_at DESC');
+    res.json({
+      success: true,
+      subscribers: result.rows
+    });
+  } catch (error) {
+    console.error('Error fetching subscribers:', error);
+    res.status(500).json({ error: 'Failed to fetch subscribers' });
+  } finally {
+    await pool.end();
+  }
+});
+
+// ============================================================================
 // Subscription Admin Routes
 // ============================================================================
 
@@ -170,11 +223,77 @@ app.post('/api/v1/events/publish', async (req, res) => {
   await lambdaWrapper(eventPublisherHandler, req, res);
 });
 
+app.get('/api/v1/events', async (req, res) => {
+  // Return empty events list for now
+  res.json({ success: true, data: { events: [], total: 0 } });
+});
+
+// ============================================================================
+// Delivery Routes
+// ============================================================================
+
+app.get('/api/v1/deliveries/stats', async (req, res) => {
+  // Return mock stats for now
+  res.json({
+    success: true,
+    data: {
+      total: 0,
+      success: 0,
+      failed: 0,
+      retrying: 0,
+      pending: 0,
+      successRate: 0,
+      avgLatencyMs: 0
+    }
+  });
+});
+
+// ============================================================================
+// DLQ Routes
+// ============================================================================
+
+app.get('/api/v1/admin/dlq', async (req, res) => {
+  // Return empty DLQ list for now
+  res.json({ success: true, data: { entries: [], total: 0 } });
+});
+
+// ============================================================================
+// Admin Auth Routes
+// ============================================================================
+
+app.post('/api/v1/admin/login', async (req, res) => {
+  await lambdaWrapper(adminAuthHandler, req, res);
+});
+
+// ============================================================================
+// Admin User Manager Routes
+// ============================================================================
+
+app.post('/api/v1/admin/users', async (req, res) => {
+  await lambdaWrapper(adminUserManagerHandler, req, res);
+});
+
+app.get('/api/v1/admin/users', async (req, res) => {
+  await lambdaWrapper(adminUserManagerHandler, req, res);
+});
+
+app.get('/api/v1/admin/users/:userId', async (req, res) => {
+  await lambdaWrapper(adminUserManagerHandler, req, res);
+});
+
+app.patch('/api/v1/admin/users/:userId', async (req, res) => {
+  await lambdaWrapper(adminUserManagerHandler, req, res);
+});
+
+app.delete('/api/v1/admin/users/:userId', async (req, res) => {
+  await lambdaWrapper(adminUserManagerHandler, req, res);
+});
+
 // ============================================================================
 // Health Check
 // ============================================================================
 
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
   res.json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
@@ -203,6 +322,8 @@ app.listen(PORT, () => {
   console.log('   POST   /api/v1/subscriptions/subscribe');
   console.log('   GET    /api/v1/subscriptions');
   console.log('   POST   /api/v1/events/publish');
+  console.log('   POST   /api/v1/admin/users');
+  console.log('   GET    /api/v1/admin/users');
   console.log('   GET    /health');
   console.log('');
   console.log('🎉 Ready to accept requests!');

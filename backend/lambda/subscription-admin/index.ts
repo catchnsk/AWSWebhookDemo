@@ -31,21 +31,22 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     const method = event.httpMethod;
     const resource = event.resource;
+    const path = event.path;
 
-    // Route based on method and resource
-    if (method === 'POST' && resource === '/subscriptions/subscribe') {
+    // Route based on method and resource/path
+    if (method === 'POST' && (resource === '/subscriptions/subscribe' || path === '/api/v1/subscriptions/subscribe')) {
       return await handleSubscribe(event);
     }
 
-    if (method === 'GET' && resource === '/subscriptions') {
+    if (method === 'GET' && (resource === '/subscriptions' || path === '/api/v1/subscriptions')) {
       return await handleListSubscriptions(event);
     }
 
-    if (method === 'GET' && resource === '/subscriptions/{subscriptionId}') {
+    if (method === 'GET' && (resource === '/subscriptions/{subscriptionId}' || path.includes('/api/v1/subscriptions/'))) {
       return await handleGetSubscription(event);
     }
 
-    if (method === 'DELETE' && resource === '/subscriptions/{subscriptionId}') {
+    if (method === 'DELETE' && (resource === '/subscriptions/{subscriptionId}' || path.includes('/api/v1/subscriptions/'))) {
       return await handleCancelSubscription(event);
     }
 
@@ -65,18 +66,49 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
  * Requirement 4b: Send the subscription information over email
  */
 async function handleSubscribe(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
-  // Extract API key from Authorization header
-  const apiKey = event.headers['Authorization']?.replace('Bearer ', '');
+  // Extract API key from Authorization header or X-API-Key
+  const apiKey = event.headers['Authorization']?.replace('Bearer ', '') || event.headers['x-api-key'] || event.headers['X-API-Key'];
 
   if (!apiKey) {
     return ErrorResponses.unauthorized('API key is required');
   }
 
-  // Validate subscriber
-  const subscriber = await getSubscriberByApiKey(apiKey);
+  // Check if admin or subscriber
+  const isAdmin = apiKey.startsWith('wh_admin');
+  let subscriber = null;
+  let subscriberId = null;
 
-  if (!subscriber) {
-    return ErrorResponses.unauthorized('Invalid API key');
+  if (isAdmin) {
+    // For admin, require subscriberId in request body
+    if (!event.body) {
+      return ErrorResponses.badRequest('Request body is required');
+    }
+
+    let requestBody: any;
+    try {
+      requestBody = JSON.parse(event.body);
+    } catch (error) {
+      return ErrorResponses.badRequest('Invalid JSON in request body');
+    }
+
+    subscriberId = requestBody.subscriberId;
+    if (!subscriberId) {
+      return ErrorResponses.badRequest('subscriberId is required for admin users');
+    }
+
+    // Get subscriber details
+    const subscriberResult = await query('SELECT * FROM subscribers WHERE id = $1', [subscriberId]);
+    if (subscriberResult.rows.length === 0) {
+      return ErrorResponses.notFound('Subscriber', subscriberId);
+    }
+    subscriber = subscriberResult.rows[0];
+  } else {
+    // Validate subscriber via API key
+    subscriber = await getSubscriberByApiKey(apiKey);
+
+    if (!subscriber) {
+      return ErrorResponses.unauthorized('Invalid API key');
+    }
   }
 
   // Parse request body
@@ -214,16 +246,21 @@ async function handleSubscribe(event: APIGatewayProxyEvent): Promise<APIGatewayP
  * Handle list subscriptions
  */
 async function handleListSubscriptions(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
-  const apiKey = event.headers['Authorization']?.replace('Bearer ', '');
+  const apiKey = event.headers['Authorization']?.replace('Bearer ', '') || event.headers['x-api-key'] || event.headers['X-API-Key'];
 
   if (!apiKey) {
     return ErrorResponses.unauthorized('API key is required');
   }
 
-  const subscriber = await getSubscriberByApiKey(apiKey);
+  // Check if admin (admin API keys start with 'wh_admin')
+  const isAdmin = apiKey.startsWith('wh_admin');
 
-  if (!subscriber) {
-    return ErrorResponses.unauthorized('Invalid API key');
+  let subscriber = null;
+  if (!isAdmin) {
+    subscriber = await getSubscriberByApiKey(apiKey);
+    if (!subscriber) {
+      return ErrorResponses.unauthorized('Invalid API key');
+    }
   }
 
   const params = event.queryStringParameters || {};
@@ -234,12 +271,36 @@ async function handleListSubscriptions(event: APIGatewayProxyEvent): Promise<API
   if (params.status) filters.status = params.status;
   if (params.enabled) filters.enabled = params.enabled === 'true';
 
-  const { subscriptions, total } = await listSubscriptionsForSubscriber(
-    subscriber.id,
-    filters,
-    page,
-    limit
-  );
+  let subscriptions, total;
+
+  if (isAdmin) {
+    // Admin sees all subscriptions - query directly from database
+    const result = await query(`
+      SELECT * FROM subscriptions
+      WHERE ($1::text IS NULL OR status = $1)
+      AND ($2::boolean IS NULL OR enabled = $2)
+      ORDER BY created_at DESC
+      LIMIT $3 OFFSET $4
+    `, [filters.status || null, filters.enabled !== undefined ? filters.enabled : null, limit, (page - 1) * limit]);
+
+    const countResult = await query(`
+      SELECT COUNT(*) as total FROM subscriptions
+      WHERE ($1::text IS NULL OR status = $1)
+      AND ($2::boolean IS NULL OR enabled = $2)
+    `, [filters.status || null, filters.enabled !== undefined ? filters.enabled : null]);
+
+    subscriptions = result.rows;
+    total = parseInt(countResult.rows[0].total, 10);
+  } else {
+    const result = await listSubscriptionsForSubscriber(
+      subscriber.id,
+      filters,
+      page,
+      limit
+    );
+    subscriptions = result.subscriptions;
+    total = result.total;
+  }
 
   // Fetch schema details for each subscription
   const subscriptionsWithDetails = await Promise.all(
@@ -247,7 +308,11 @@ async function handleListSubscriptions(event: APIGatewayProxyEvent): Promise<API
       const schema = await getSchemaById(sub.schema_id);
       return {
         id: sub.id,
+        subscriberId: sub.subscriber_id,
+        schemaId: sub.schema_id,
         webhookUrl: sub.webhook_url,
+        maxRetries: sub.max_retries,
+        backoffStrategy: sub.backoff_strategy,
         enabled: sub.enabled,
         status: sub.status,
         schema: {

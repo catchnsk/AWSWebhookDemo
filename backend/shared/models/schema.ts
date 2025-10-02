@@ -25,6 +25,10 @@ export interface Schema {
   created_at: Date;
   updated_at: Date;
   deprecated_at?: Date;
+  schema_id?: string;
+  domain?: 'payment' | 'account' | 'apply';
+  partner_user_id?: string;
+  system_user_id?: string;
 }
 
 /**
@@ -45,6 +49,8 @@ export interface CreateSchemaDTO {
   description?: string;
   documentation_url?: string;
   example_payload?: any;
+  domain?: 'payment' | 'account' | 'apply' | null;
+  system_user_id?: string | null;
 }
 
 /**
@@ -54,9 +60,13 @@ export interface UpdateSchemaDTO {
   description?: string;
   documentation_url?: string;
   example_payload?: any;
+  schema_definition?: any;
   is_public?: boolean;
   requires_approval?: boolean;
   status?: 'active' | 'deprecated' | 'disabled';
+  domain?: 'payment' | 'account' | 'apply' | null;
+  partner_user_id?: string | null;
+  system_user_id?: string | null;
 }
 
 /**
@@ -67,8 +77,8 @@ export async function createSchema(data: CreateSchemaDTO): Promise<Schema> {
     `INSERT INTO schemas (
       producer_id, schema_registry_id, schema_registry_version, name, event_type,
       version, schema_format, schema_definition, is_public, requires_approval,
-      compatibility_mode, description, documentation_url, example_payload
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      compatibility_mode, description, documentation_url, example_payload, domain, system_user_id
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
     RETURNING *`,
     [
       data.producer_id,
@@ -85,6 +95,8 @@ export async function createSchema(data: CreateSchemaDTO): Promise<Schema> {
       data.description || null,
       data.documentation_url || null,
       data.example_payload ? JSON.stringify(data.example_payload) : null,
+      data.domain || null,
+      data.system_user_id || null,
     ]
   );
 
@@ -236,6 +248,12 @@ export async function updateSchema(
     paramIndex++;
   }
 
+  if (data.schema_definition !== undefined) {
+    updates.push(`schema_definition = $${paramIndex}`);
+    params.push(JSON.stringify(data.schema_definition));
+    paramIndex++;
+  }
+
   if (data.is_public !== undefined) {
     updates.push(`is_public = $${paramIndex}`);
     params.push(data.is_public);
@@ -256,6 +274,24 @@ export async function updateSchema(
     if (data.status === 'deprecated') {
       updates.push(`deprecated_at = CURRENT_TIMESTAMP`);
     }
+  }
+
+  if (data.domain !== undefined) {
+    updates.push(`domain = $${paramIndex}`);
+    params.push(data.domain);
+    paramIndex++;
+  }
+
+  if (data.partner_user_id !== undefined) {
+    updates.push(`partner_user_id = $${paramIndex}`);
+    params.push(data.partner_user_id);
+    paramIndex++;
+  }
+
+  if (data.system_user_id !== undefined) {
+    updates.push(`system_user_id = $${paramIndex}`);
+    params.push(data.system_user_id);
+    paramIndex++;
   }
 
   if (updates.length === 0) {
