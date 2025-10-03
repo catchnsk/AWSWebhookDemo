@@ -27,6 +27,11 @@ import {
   X,
   CheckCircle,
   XCircle,
+  Moon,
+  Sun,
+  Search,
+  ArrowLeft,
+  ArrowRight,
 } from 'lucide-react';
 import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import toast from 'react-hot-toast';
@@ -46,6 +51,10 @@ const AdminDashboard: React.FC = () => {
   const { clearAuth, userName, userRole } = useAuthStore();
   const [activeTab, setActiveTab] = useState<'overview' | 'schemas' | 'subscriptions' | 'events' | 'dlq' | 'users' | 'test-event'>('overview');
   const [loading, setLoading] = useState(true);
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem('darkMode');
+    return saved ? JSON.parse(saved) : false;
+  });
   const [stats, setStats] = useState<Stats>({
     totalSchemas: 0,
     totalSubscriptions: 0,
@@ -115,6 +124,10 @@ const AdminDashboard: React.FC = () => {
     eventId?: string;
     deliveriesQueued?: number;
   } | null>(null);
+  const [schemaSearchQuery, setSchemaSearchQuery] = useState('');
+  const [showNewSchemaModal, setShowNewSchemaModal] = useState(false);
+  const [schemaRegistrationStep, setSchemaRegistrationStep] = useState(1);
+  const [logsSubTab, setLogsSubTab] = useState<'delivery' | 'event'>('delivery');
 
   // Mock data for charts - with realistic trends
   const [eventsOverTime] = useState([
@@ -158,6 +171,19 @@ const AdminDashboard: React.FC = () => {
   useEffect(() => {
     loadDashboardData();
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem('darkMode', JSON.stringify(darkMode));
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [darkMode]);
+
+  const toggleDarkMode = () => {
+    setDarkMode(!darkMode);
+  };
 
   const loadDashboardData = async () => {
     setLoading(true);
@@ -374,9 +400,9 @@ const AdminDashboard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white dark:bg-gray-900 transition-colors duration-200">
       {/* Sidebar */}
-      <div className="fixed left-0 top-0 h-full w-64 bg-gradient-to-b from-blue-600 to-blue-700 border-r border-blue-800 p-6 z-10 shadow-xl">
+      <div className="fixed left-0 top-0 h-full w-64 bg-gradient-to-b from-blue-600 to-blue-700 dark:from-gray-800 dark:to-gray-900 border-r border-blue-800 dark:border-gray-700 p-6 z-10 shadow-xl">
         <div className="flex items-center gap-3 mb-8">
           <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
             <Shield className="w-6 h-6 text-white" />
@@ -440,7 +466,7 @@ const AdminDashboard: React.FC = () => {
               }`}
             >
               <Activity className="w-5 h-5" />
-              <span className="font-medium">Events</span>
+              <span className="font-medium">Logs</span>
               {activeTab === 'events' && <ChevronRight className="w-4 h-4 ml-auto" />}
             </button>
           )}
@@ -454,7 +480,7 @@ const AdminDashboard: React.FC = () => {
               }`}
             >
               <AlertCircle className="w-5 h-5" />
-              <span className="font-medium">Dead Letter Queue</span>
+              <span className="font-medium">DL Queue</span>
               {dlqEntries.filter(e => !e.resolved).length > 0 && (
                 <span className="ml-auto bg-red-500 text-white text-xs px-2 py-1 rounded-full">
                   {dlqEntries.filter(e => !e.resolved).length}
@@ -499,12 +525,12 @@ const AdminDashboard: React.FC = () => {
         {/* Top Bar */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h2 className="text-3xl font-bold text-gray-900 mb-2">
+            <h2 className="text-3xl font-bold text-gray-900 dark:text-white dark:text-white mb-2">
               {activeTab === 'overview' && 'Dashboard'}
               {activeTab === 'schemas' && 'Schemas'}
               {activeTab === 'subscriptions' && 'Subscribers'}
-              {activeTab === 'events' && 'Events'}
-              {activeTab === 'dlq' && 'Dead Letter Queue'}
+              {activeTab === 'events' && 'Logs'}
+              {activeTab === 'dlq' && 'DL Queue'}
               {activeTab === 'test-event' && 'Test Event'}
               {activeTab === 'users' && 'Users'}
             </h2>
@@ -532,10 +558,18 @@ const AdminDashboard: React.FC = () => {
             <button
               onClick={loadDashboardData}
               disabled={loading}
-              className="px-4 py-2 bg-gray-100 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-200 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+              className="px-4 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
               Refresh
+            </button>
+            <button
+              onClick={toggleDarkMode}
+              className="px-4 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all flex items-center gap-2 shadow-sm"
+              title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            >
+              {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              {darkMode ? 'Light' : 'Dark'}
             </button>
             <button
               onClick={handleLogout}
@@ -552,7 +586,7 @@ const AdminDashboard: React.FC = () => {
           <div className="space-y-6">
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all">
+              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all">
                 <div className="flex items-center justify-between mb-4">
                   <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
                     <FileCode className="w-6 h-6 text-blue-600" />
@@ -562,12 +596,12 @@ const AdminDashboard: React.FC = () => {
                     +12%
                   </span>
                 </div>
-                <h3 className="text-gray-600 text-sm mb-1">Total Schemas</h3>
+                <h3 className="text-gray-600 dark:text-gray-300 text-sm mb-1">Total Schemas</h3>
                 <p className="text-3xl font-bold text-gray-900">{stats.totalSchemas}</p>
-                <p className="text-gray-500 text-xs mt-2">Active event schemas</p>
+                <p className="text-gray-500 dark:text-gray-400 text-xs mt-2">Active event schemas</p>
               </div>
 
-              <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all">
+              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all">
                 <div className="flex items-center justify-between mb-4">
                   <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
                     <Users className="w-6 h-6 text-purple-600" />
@@ -577,12 +611,12 @@ const AdminDashboard: React.FC = () => {
                     +8%
                   </span>
                 </div>
-                <h3 className="text-gray-600 text-sm mb-1">Subscriptions</h3>
+                <h3 className="text-gray-600 dark:text-gray-300 text-sm mb-1">Subscriptions</h3>
                 <p className="text-3xl font-bold text-gray-900">{stats.totalSubscriptions}</p>
-                <p className="text-gray-500 text-xs mt-2">Active webhook subscriptions</p>
+                <p className="text-gray-500 dark:text-gray-400 text-xs mt-2">Active webhook subscriptions</p>
               </div>
 
-              <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all">
+              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all">
                 <div className="flex items-center justify-between mb-4">
                   <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
                     <Zap className="w-6 h-6 text-green-600" />
@@ -592,12 +626,12 @@ const AdminDashboard: React.FC = () => {
                     +25%
                   </span>
                 </div>
-                <h3 className="text-gray-600 text-sm mb-1">Total Events</h3>
+                <h3 className="text-gray-600 dark:text-gray-300 text-sm mb-1">Total Events</h3>
                 <p className="text-3xl font-bold text-gray-900">{stats.totalEvents}</p>
-                <p className="text-gray-500 text-xs mt-2">Events published this month</p>
+                <p className="text-gray-500 dark:text-gray-400 text-xs mt-2">Events published this month</p>
               </div>
 
-              <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all">
+              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all">
                 <div className="flex items-center justify-between mb-4">
                   <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center">
                     <Database className="w-6 h-6 text-yellow-600" />
@@ -606,17 +640,17 @@ const AdminDashboard: React.FC = () => {
                     {stats.successRate.toFixed(1)}%
                   </span>
                 </div>
-                <h3 className="text-gray-600 text-sm mb-1">Success Rate</h3>
+                <h3 className="text-gray-600 dark:text-gray-300 text-sm mb-1">Success Rate</h3>
                 <p className="text-3xl font-bold text-gray-900">{stats.totalDeliveries}</p>
-                <p className="text-gray-500 text-xs mt-2">Total deliveries processed</p>
+                <p className="text-gray-500 dark:text-gray-400 text-xs mt-2">Total deliveries processed</p>
               </div>
             </div>
 
             {/* Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Events Over Time Chart */}
-              <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-lg">
-                <h3 className="text-gray-900 text-lg font-semibold mb-4 flex items-center gap-2">
+              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-lg">
+                <h3 className="text-gray-900 dark:text-white text-lg font-semibold mb-4 flex items-center gap-2">
                   <Activity className="w-5 h-5 text-blue-600" />
                   Events Over Time
                 </h3>
@@ -640,8 +674,8 @@ const AdminDashboard: React.FC = () => {
               </div>
 
               {/* Delivery Status Pie Chart */}
-              <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-lg">
-                <h3 className="text-gray-900 text-lg font-semibold mb-4 flex items-center gap-2">
+              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-lg">
+                <h3 className="text-gray-900 dark:text-white text-lg font-semibold mb-4 flex items-center gap-2">
                   <Database className="w-5 h-5 text-blue-600" />
                   Delivery Status Distribution
                 </h3>
@@ -674,39 +708,39 @@ const AdminDashboard: React.FC = () => {
             </div>
 
             {/* Recent Activity */}
-            <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-lg">
-              <h3 className="text-gray-900 text-lg font-semibold mb-4 flex items-center gap-2">
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-lg">
+              <h3 className="text-gray-900 dark:text-white text-lg font-semibold mb-4 flex items-center gap-2">
                 <Clock className="w-5 h-5 text-blue-600" />
                 Recent Events
               </h3>
               <div className="space-y-3">
                 {events.slice(0, 5).map((event) => (
-                  <div key={event.eventId} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-all">
+                  <div key={event.eventId} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 hover:bg-gray-100 dark:bg-gray-700 transition-all">
                     <div className="flex items-center gap-4">
                       <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
                       <div>
-                        <p className="text-gray-900 font-medium">{event.eventType}</p>
-                        <p className="text-gray-600 text-sm">{format(new Date(event.createdAt), 'PPpp')}</p>
+                        <p className="text-gray-900 dark:text-white font-medium">{event.eventType}</p>
+                        <p className="text-gray-600 dark:text-gray-300 text-sm">{format(new Date(event.createdAt), 'PPpp')}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-6">
                       <div className="text-center">
-                        <p className="text-gray-600 text-xs">Subscribers</p>
-                        <p className="text-gray-900 font-semibold">{event.subscriberCount}</p>
+                        <p className="text-gray-600 dark:text-gray-300 text-xs">Subscribers</p>
+                        <p className="text-gray-900 dark:text-white font-semibold">{event.subscriberCount}</p>
                       </div>
                       <div className="text-center">
-                        <p className="text-gray-600 text-xs">Completed</p>
+                        <p className="text-gray-600 dark:text-gray-300 text-xs">Completed</p>
                         <p className="text-green-600 font-semibold">{event.deliveriesCompleted}</p>
                       </div>
                       <div className="text-center">
-                        <p className="text-gray-600 text-xs">Failed</p>
+                        <p className="text-gray-600 dark:text-gray-300 text-xs">Failed</p>
                         <p className="text-red-600 font-semibold">{event.deliveriesFailed}</p>
                       </div>
                     </div>
                   </div>
                 ))}
                 {events.length === 0 && (
-                  <div className="text-center py-8 text-gray-500">
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                     No recent events to display
                   </div>
                 )}
@@ -718,30 +752,77 @@ const AdminDashboard: React.FC = () => {
         {/* Schemas Tab */}
         {activeTab === 'schemas' && (
           <div className="space-y-6">
-            <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-lg">
+            {/* Search and Add Schema Bar */}
+            <div className="flex items-center gap-4">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search schemas by name, event type, or domain..."
+                  value={schemaSearchQuery}
+                  onChange={(e) => setSchemaSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <button
+                onClick={() => {
+                  setShowNewSchemaModal(true);
+                  setSchemaRegistrationStep(1);
+                  setNewSchemaForm({
+                    name: '',
+                    eventType: '',
+                    version: '1.0.0',
+                    schemaFormat: 'json',
+                    schemaDefinition: '{\n  "type": "object",\n  "properties": {\n    \n  }\n}',
+                    description: '',
+                    isPublic: true,
+                    examplePayload: '',
+                    schemaId: '',
+                    domain: '',
+                    partnerUserId: '',
+                    systemUserId: ''
+                  });
+                }}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all flex items-center gap-2 shadow-sm whitespace-nowrap"
+              >
+                <Plus className="w-5 h-5" />
+                New Schema
+              </button>
+            </div>
+
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-lg">
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="text-left py-3 px-4 text-gray-700 font-semibold">Schema ID</th>
-                      <th className="text-left py-3 px-4 text-gray-700 font-semibold">Schema Name</th>
-                      <th className="text-left py-3 px-4 text-gray-700 font-semibold">Domain</th>
-                      <th className="text-left py-3 px-4 text-gray-700 font-semibold">Event Type</th>
-                      <th className="text-left py-3 px-4 text-gray-700 font-semibold">Partner User ID</th>
-                      <th className="text-left py-3 px-4 text-gray-700 font-semibold">System User ID</th>
-                      <th className="text-left py-3 px-4 text-gray-700 font-semibold">Version</th>
-                      <th className="text-left py-3 px-4 text-gray-700 font-semibold">Status</th>
-                      <th className="text-left py-3 px-4 text-gray-700 font-semibold">Actions</th>
+                    <tr className="border-b border-gray-200 dark:border-gray-700">
+                      <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-200 font-semibold">Schema ID</th>
+                      <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-200 font-semibold">Schema Name</th>
+                      <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-200 font-semibold">Domain</th>
+                      <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-200 font-semibold">Event Type</th>
+                      <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-200 font-semibold">Partner User ID</th>
+                      <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-200 font-semibold">System User ID</th>
+                      <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-200 font-semibold">Version</th>
+                      <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-200 font-semibold">Status</th>
+                      <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-200 font-semibold">Created</th>
+                      <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-200 font-semibold">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {schemas.map((schema) => (
-                      <tr key={schema.id} className="border-b border-gray-100 hover:bg-gray-50 transition-all">
+                    {schemas.filter(schema => {
+                      if (!schemaSearchQuery) return true;
+                      const query = schemaSearchQuery.toLowerCase();
+                      return (
+                        schema.name.toLowerCase().includes(query) ||
+                        schema.eventType.toLowerCase().includes(query) ||
+                        (schema.domain && schema.domain.toLowerCase().includes(query))
+                      );
+                    }).map((schema) => (
+                      <tr key={schema.id} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:bg-gray-700 transition-all">
                         <td className="py-4 px-4">
-                          <span className="text-gray-700 font-mono text-sm">{schema.schemaId || '-'}</span>
+                          <span className="text-gray-700 dark:text-gray-300 font-mono text-sm">{schema.schemaId || '-'}</span>
                         </td>
                         <td className="py-4 px-4">
-                          <p className="text-gray-900 font-medium">{schema.name}</p>
+                          <p className="text-gray-900 dark:text-white font-medium">{schema.name}</p>
                         </td>
                         <td className="py-4 px-4">
                           {schema.domain ? (
@@ -757,22 +838,27 @@ const AdminDashboard: React.FC = () => {
                           )}
                         </td>
                         <td className="py-4 px-4">
-                          <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">
+                          <span className="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-full text-sm font-medium">
                             {schema.eventType}
                           </span>
                         </td>
                         <td className="py-4 px-4">
-                          <span className="text-gray-700 font-mono text-sm">{schema.partnerUserId || '-'}</span>
+                          <span className="text-gray-700 dark:text-gray-300 font-mono text-sm">{schema.partnerUserId || '-'}</span>
                         </td>
                         <td className="py-4 px-4">
-                          <span className="text-gray-700 font-mono text-sm">{schema.systemUserId || '-'}</span>
+                          <span className="text-gray-700 dark:text-gray-300 font-mono text-sm">{schema.systemUserId || '-'}</span>
                         </td>
                         <td className="py-4 px-4">
-                          <span className="text-gray-700">{schema.version}</span>
+                          <span className="text-gray-700 dark:text-gray-200">{schema.version}</span>
                         </td>
                         <td className="py-4 px-4">
                           <span className={`px-3 py-1 rounded-full text-sm font-medium ${schema.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
                             {schema.status}
+                          </span>
+                        </td>
+                        <td className="py-4 px-4">
+                          <span className="text-gray-600 dark:text-gray-300 text-sm">
+                            {schema.createdAt ? format(new Date(schema.createdAt), 'MMM d, yyyy') : 'N/A'}
                           </span>
                         </td>
                         <td className="py-4 px-4">
@@ -851,7 +937,7 @@ const AdminDashboard: React.FC = () => {
                   </tbody>
                 </table>
                 {schemas.length === 0 && (
-                  <div className="text-center py-12 text-gray-500">
+                  <div className="text-center py-12 text-gray-500 dark:text-gray-400">
                     No schemas found
                   </div>
                 )}
@@ -863,17 +949,17 @@ const AdminDashboard: React.FC = () => {
         {/* Subscriptions Tab */}
         {activeTab === 'subscriptions' && (
           <div className="space-y-6">
-            <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-lg">
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-lg">
               <div className="space-y-4">
                 {subscriptions.map((subscription) => (
-                  <div key={subscription.id} className="p-4 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-all">
+                  <div key={subscription.id} className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 hover:bg-gray-100 dark:bg-gray-700 transition-all">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-3">
                         <div className={`w-3 h-3 rounded-full ${subscription.enabled ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
-                        <h4 className="text-gray-900 font-semibold">
+                        <h4 className="text-gray-900 dark:text-white font-semibold">
                           {subscription.schema?.name || 'Schema'}
                         </h4>
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${subscription.enabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${subscription.enabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 dark:bg-gray-700 text-gray-700'}`}>
                           {subscription.status}
                         </span>
                       </div>
@@ -894,24 +980,30 @@ const AdminDashboard: React.FC = () => {
                         )}
                       </button>
                     </div>
-                    <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div className="grid grid-cols-4 gap-4 text-sm">
                       <div>
-                        <p className="text-gray-600 font-medium">Webhook URL</p>
-                        <p className="text-gray-900 truncate font-medium">{subscription.webhookUrl}</p>
+                        <p className="text-gray-600 dark:text-gray-300 font-medium">Webhook URL</p>
+                        <p className="text-gray-900 dark:text-white truncate font-medium">{subscription.webhookUrl}</p>
                       </div>
                       <div>
-                        <p className="text-gray-600 font-medium">Max Retries</p>
-                        <p className="text-gray-900 font-medium">{subscription.maxRetries}</p>
+                        <p className="text-gray-600 dark:text-gray-300 font-medium">Max Retries</p>
+                        <p className="text-gray-900 dark:text-white font-medium">{subscription.maxRetries}</p>
                       </div>
                       <div>
-                        <p className="text-gray-600 font-medium">Backoff Strategy</p>
-                        <p className="text-gray-900 capitalize font-medium">{subscription.backoffStrategy}</p>
+                        <p className="text-gray-600 dark:text-gray-300 font-medium">Backoff Strategy</p>
+                        <p className="text-gray-900 dark:text-white capitalize font-medium">{subscription.backoffStrategy}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600 dark:text-gray-300 font-medium">Created</p>
+                        <p className="text-gray-900 dark:text-white font-medium">
+                          {subscription.createdAt ? format(new Date(subscription.createdAt), 'MMM d, yyyy') : 'N/A'}
+                        </p>
                       </div>
                     </div>
                   </div>
                 ))}
                 {subscriptions.length === 0 && (
-                  <div className="text-center py-12 text-gray-500">
+                  <div className="text-center py-12 text-gray-500 dark:text-gray-400">
                     No subscriptions found
                   </div>
                 )}
@@ -920,50 +1012,90 @@ const AdminDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* Events Tab */}
+        {/* Logs Tab */}
         {activeTab === 'events' && (
           <div className="space-y-6">
-            <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-6 shadow-xl">
-              <div className="space-y-3">
-                {events.map((event) => (
-                  <div key={event.eventId} className="p-4 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 transition-all">
+            {/* Sub-tabs for Logs */}
+            <div className="flex gap-4 border-b border-gray-200 dark:border-gray-700">
+              <button
+                onClick={() => setLogsSubTab('delivery')}
+                className={`pb-3 px-4 font-semibold transition-all ${
+                  logsSubTab === 'delivery'
+                    ? 'border-b-2 border-blue-600 text-blue-600 dark:text-blue-400'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                Delivery Logs
+              </button>
+              <button
+                onClick={() => setLogsSubTab('event')}
+                className={`pb-3 px-4 font-semibold transition-all ${
+                  logsSubTab === 'event'
+                    ? 'border-b-2 border-blue-600 text-blue-600 dark:text-blue-400'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                Event Logs
+              </button>
+            </div>
+
+            {/* Delivery Logs Content */}
+            {logsSubTab === 'delivery' && (
+              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-lg">
+                <div className="space-y-3">
+                  <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                    No delivery logs available
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Event Logs Content */}
+            {logsSubTab === 'event' && (
+              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-lg">
+                <div className="space-y-3">
+                  {events.map((event) => (
+                  <div key={event.eventId} className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 hover:bg-gray-100 dark:bg-gray-700 transition-all">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
                         <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-purple-600 rounded-lg flex items-center justify-center">
                           <Activity className="w-5 h-5 text-white" />
                         </div>
                         <div>
-                          <h4 className="text-white font-semibold">{event.eventType}</h4>
-                          <p className="text-gray-400 text-sm">{format(new Date(event.createdAt), 'PPpp')}</p>
+                          <h4 className="text-gray-900 dark:text-white font-semibold">{event.eventType}</h4>
+                          <p className="text-gray-600 dark:text-gray-300 text-sm">
+                            {event.createdAt ? format(new Date(event.createdAt), 'MMM d, yyyy h:mm a') : 'N/A'}
+                          </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-6">
                         <div className="text-center">
-                          <p className="text-gray-400 text-xs">Queued</p>
-                          <p className="text-blue-400 font-semibold">{event.deliveriesQueued}</p>
+                          <p className="text-gray-600 dark:text-gray-300 text-xs">Queued</p>
+                          <p className="text-blue-600 font-semibold">{event.deliveriesQueued}</p>
                         </div>
                         <div className="text-center">
-                          <p className="text-gray-400 text-xs">Completed</p>
-                          <p className="text-green-400 font-semibold">{event.deliveriesCompleted}</p>
+                          <p className="text-gray-600 dark:text-gray-300 text-xs">Completed</p>
+                          <p className="text-green-600 font-semibold">{event.deliveriesCompleted}</p>
                         </div>
                         <div className="text-center">
-                          <p className="text-gray-400 text-xs">Failed</p>
-                          <p className="text-red-400 font-semibold">{event.deliveriesFailed}</p>
+                          <p className="text-gray-600 dark:text-gray-300 text-xs">Failed</p>
+                          <p className="text-red-600 font-semibold">{event.deliveriesFailed}</p>
                         </div>
-                        <button className="p-2 hover:bg-white/10 rounded-lg transition-all">
-                          <ExternalLink className="w-4 h-4 text-gray-400" />
+                        <button className="p-2 hover:bg-gray-200 rounded-lg transition-all">
+                          <ExternalLink className="w-4 h-4 text-gray-600" />
                         </button>
                       </div>
                     </div>
                   </div>
-                ))}
-                {events.length === 0 && (
-                  <div className="text-center py-12 text-gray-400">
-                    No events to display
-                  </div>
-                )}
+                  ))}
+                  {events.length === 0 && (
+                    <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                      No events to display
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -1048,34 +1180,34 @@ const AdminDashboard: React.FC = () => {
               </button>
             </div>
 
-            <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-lg">
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-lg">
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="text-left py-3 px-4 text-gray-700 font-semibold">Name</th>
-                      <th className="text-left py-3 px-4 text-gray-700 font-semibold">Email</th>
-                      <th className="text-left py-3 px-4 text-gray-700 font-semibold">Role</th>
-                      <th className="text-left py-3 px-4 text-gray-700 font-semibold">Status</th>
-                      <th className="text-left py-3 px-4 text-gray-700 font-semibold">Last Login</th>
-                      <th className="text-left py-3 px-4 text-gray-700 font-semibold">Created</th>
-                      <th className="text-left py-3 px-4 text-gray-700 font-semibold">Actions</th>
+                    <tr className="border-b border-gray-200 dark:border-gray-700">
+                      <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-200 font-semibold">Name</th>
+                      <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-200 font-semibold">Email</th>
+                      <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-200 font-semibold">Role</th>
+                      <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-200 font-semibold">Status</th>
+                      <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-200 font-semibold">Last Login</th>
+                      <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-200 font-semibold">Created</th>
+                      <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-200 font-semibold">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {adminUsers.map((user) => (
-                      <tr key={user.id} className="border-b border-gray-100 hover:bg-gray-50 transition-all">
+                      <tr key={user.id} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:bg-gray-700 transition-all">
                         <td className="py-4 px-4">
-                          <p className="text-gray-900 font-semibold">{user.name}</p>
+                          <p className="text-gray-900 dark:text-white font-semibold">{user.name}</p>
                         </td>
                         <td className="py-4 px-4">
-                          <p className="text-gray-700 font-medium">{user.email}</p>
+                          <p className="text-gray-700 dark:text-gray-300 font-medium">{user.email}</p>
                         </td>
                         <td className="py-4 px-4">
                           <span className={`px-3 py-1 rounded-full text-sm font-medium ${
                             user.role === 'super_admin' ? 'bg-purple-100 text-purple-700' :
                             user.role === 'admin' ? 'bg-blue-100 text-blue-700' :
-                            'bg-gray-100 text-gray-700'
+                            'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200'
                           }`}>
                             {user.role.replace('_', ' ')}
                           </span>
@@ -1084,18 +1216,18 @@ const AdminDashboard: React.FC = () => {
                           <span className={`px-3 py-1 rounded-full text-sm font-medium ${
                             user.status === 'active' ? 'bg-green-100 text-green-700' :
                             user.status === 'suspended' ? 'bg-red-100 text-red-700' :
-                            'bg-gray-100 text-gray-700'
+                            'bg-gray-100 dark:bg-gray-700 text-gray-700'
                           }`}>
                             {user.status}
                           </span>
                         </td>
                         <td className="py-4 px-4">
-                          <span className="text-gray-600 text-sm font-medium">
+                          <span className="text-gray-600 dark:text-gray-300 text-sm font-medium">
                             {user.lastLoginAt ? format(new Date(user.lastLoginAt), 'PP') : 'Never'}
                           </span>
                         </td>
                         <td className="py-4 px-4">
-                          <span className="text-gray-600 text-sm font-medium">{format(new Date(user.createdAt), 'PP')}</span>
+                          <span className="text-gray-600 dark:text-gray-300 text-sm font-medium">{format(new Date(user.createdAt), 'PP')}</span>
                         </td>
                         <td className="py-4 px-4">
                           <div className="flex items-center gap-2">
@@ -1130,7 +1262,7 @@ const AdminDashboard: React.FC = () => {
                   </tbody>
                 </table>
                 {adminUsers.length === 0 && (
-                  <div className="text-center py-12 text-gray-500">
+                  <div className="text-center py-12 text-gray-500 dark:text-gray-400">
                     No users found
                   </div>
                 )}
@@ -1142,9 +1274,9 @@ const AdminDashboard: React.FC = () => {
         {/* Test Event Tab */}
         {activeTab === 'test-event' && (
           <div className="space-y-6">
-            <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-lg">
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-8 shadow-lg">
               <div className="mb-6">
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">Test Webhook Event</h3>
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Test Webhook Event</h3>
                 <p className="text-gray-600">Send a test event to verify your webhook configuration and schema validation</p>
               </div>
 
@@ -1210,7 +1342,7 @@ const AdminDashboard: React.FC = () => {
                   <select
                     value={testEventForm.eventType}
                     onChange={(e) => setTestEventForm({ ...testEventForm, eventType: e.target.value })}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     required
                   >
                     <option value="">Select an event type</option>
@@ -1220,7 +1352,7 @@ const AdminDashboard: React.FC = () => {
                       </option>
                     ))}
                   </select>
-                  <p className="mt-2 text-sm text-gray-500">Select a registered schema to test</p>
+                  <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Select a registered schema to test</p>
                 </div>
 
                 <div>
@@ -1229,11 +1361,11 @@ const AdminDashboard: React.FC = () => {
                     value={testEventForm.payload}
                     onChange={(e) => setTestEventForm({ ...testEventForm, payload: e.target.value })}
                     onClick={(e) => e.stopPropagation()}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                    className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
                     rows={15}
                     placeholder='{\n  "key": "value"\n}'
                   />
-                  <p className="mt-2 text-sm text-gray-500">Enter the event payload as JSON</p>
+                  <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Enter the event payload as JSON</p>
                 </div>
 
                 {/* Result Indicator */}
@@ -1288,7 +1420,7 @@ const AdminDashboard: React.FC = () => {
                       });
                       setTestEventResult(null);
                     }}
-                    className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all font-medium flex items-center gap-2"
+                    className="px-6 py-3 border border-gray-300 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:bg-gray-700 transition-all font-medium flex items-center gap-2"
                   >
                     <X className="w-4 h-4" />
                     Clear
@@ -1304,7 +1436,7 @@ const AdminDashboard: React.FC = () => {
                   <FlaskConical className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h4 className="font-semibold text-gray-900 mb-1">Testing Tips</h4>
+                  <h4 className="font-semibold text-gray-900 dark:text-white mb-1">Testing Tips</h4>
                   <ul className="text-sm text-gray-700 space-y-1">
                     <li>• Make sure you have active subscriptions for the selected event type</li>
                     <li>• Use the schema definition to ensure your payload matches the expected format</li>
@@ -1431,7 +1563,7 @@ const AdminDashboard: React.FC = () => {
       {/* Edit User Modal */}
       {showEditUserModal && selectedUser && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white border border-gray-200 rounded-2xl p-6 max-w-md w-full">
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 max-w-md w-full">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-2xl font-bold text-gray-900">Edit User</h3>
               <button
@@ -1440,7 +1572,7 @@ const AdminDashboard: React.FC = () => {
                   setSelectedUser(null);
                   setEditUserForm({ role: 'admin', password: '', status: 'active' });
                 }}
-                className="text-gray-400 hover:text-gray-900 transition-all text-2xl"
+                className="text-gray-400 hover:text-gray-900 dark:text-white transition-all text-2xl"
               >
                 ✕
               </button>
@@ -1491,7 +1623,7 @@ const AdminDashboard: React.FC = () => {
                 <input
                   type="text"
                   defaultValue={selectedUser.name}
-                  className="w-full px-4 py-2 bg-gray-100 border border-gray-300 rounded-lg text-gray-500 cursor-not-allowed"
+                  className="w-full px-4 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 rounded-lg text-gray-500 dark:text-gray-400 cursor-not-allowed"
                   disabled
                 />
               </div>
@@ -1501,7 +1633,7 @@ const AdminDashboard: React.FC = () => {
                 <input
                   type="text"
                   defaultValue={selectedUser.email}
-                  className="w-full px-4 py-2 bg-gray-100 border border-gray-300 rounded-lg text-gray-500 cursor-not-allowed"
+                  className="w-full px-4 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 rounded-lg text-gray-500 dark:text-gray-400 cursor-not-allowed"
                   disabled
                 />
               </div>
@@ -1512,7 +1644,7 @@ const AdminDashboard: React.FC = () => {
                 <select
                   value={editUserForm.role}
                   onChange={(e) => setEditUserForm({ ...editUserForm, role: e.target.value as 'super_admin' | 'admin' | 'viewer' | 'tester' | 'rtb' })}
-                  className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="admin">Admin</option>
                   <option value="super_admin">Super Admin</option>
@@ -1528,7 +1660,7 @@ const AdminDashboard: React.FC = () => {
                 <select
                   value={editUserForm.status}
                   onChange={(e) => setEditUserForm({ ...editUserForm, status: e.target.value })}
-                  className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="active">Active</option>
                   <option value="suspended">Suspended</option>
@@ -1545,14 +1677,14 @@ const AdminDashboard: React.FC = () => {
                   type="password"
                   value={editUserForm.password}
                   onChange={(e) => setEditUserForm({ ...editUserForm, password: e.target.value })}
-                  className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 rounded-lg text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Min 6 characters"
                   minLength={6}
                 />
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center gap-4 pt-4 border-t border-gray-200">
+              <div className="flex items-center gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                 <button
                   type="submit"
                   className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all font-medium shadow-sm"
@@ -1566,7 +1698,7 @@ const AdminDashboard: React.FC = () => {
                     setSelectedUser(null);
                     setEditUserForm({ role: 'admin', password: '', status: 'active' });
                   }}
-                  className="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all"
+                  className="px-6 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 transition-all"
                 >
                   Cancel
                 </button>
@@ -1943,18 +2075,18 @@ const AdminDashboard: React.FC = () => {
       {/* Schema Detail Modal */}
       {showSchemaModal && selectedSchema && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white border border-gray-200 rounded-2xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-xl">
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h3 className="text-2xl font-bold text-gray-900">{selectedSchema.name}</h3>
-                <p className="text-gray-600 mt-1">Event Type: {selectedSchema.eventType}</p>
+                <p className="text-gray-600 dark:text-gray-300 mt-1">Event Type: {selectedSchema.eventType}</p>
               </div>
               <button
                 onClick={() => {
                   setShowSchemaModal(false);
                   setSelectedSchema(null);
                 }}
-                className="text-gray-400 hover:text-gray-900 transition-all text-2xl"
+                className="text-gray-400 hover:text-gray-900 dark:text-white transition-all text-2xl"
               >
                 ✕
               </button>
@@ -1963,20 +2095,20 @@ const AdminDashboard: React.FC = () => {
             <div className="space-y-6">
               {/* Schema Metadata */}
               <div className="grid grid-cols-2 gap-4">
-                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                  <p className="text-gray-600 text-sm font-medium">Version</p>
-                  <p className="text-gray-900 font-semibold mt-1">{selectedSchema.version}</p>
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                  <p className="text-gray-600 dark:text-gray-300 text-sm font-medium">Version</p>
+                  <p className="text-gray-900 dark:text-white font-semibold mt-1">{selectedSchema.version}</p>
                 </div>
-                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                  <p className="text-gray-600 text-sm font-medium">Format</p>
-                  <p className="text-gray-900 font-semibold mt-1">{selectedSchema.schemaFormat || 'json'}</p>
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                  <p className="text-gray-600 dark:text-gray-300 text-sm font-medium">Format</p>
+                  <p className="text-gray-900 dark:text-white font-semibold mt-1">{selectedSchema.schemaFormat || 'json'}</p>
                 </div>
-                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                  <p className="text-gray-600 text-sm font-medium">Subscriptions</p>
-                  <p className="text-gray-900 font-semibold mt-1">{selectedSchema.subscriptionCount}</p>
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                  <p className="text-gray-600 dark:text-gray-300 text-sm font-medium">Subscriptions</p>
+                  <p className="text-gray-900 dark:text-white font-semibold mt-1">{selectedSchema.subscriptionCount}</p>
                 </div>
-                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                  <p className="text-gray-600 text-sm font-medium">Status</p>
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                  <p className="text-gray-600 dark:text-gray-300 text-sm font-medium">Status</p>
                   <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${selectedSchema.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
                     {selectedSchema.status}
                   </span>
@@ -1986,11 +2118,11 @@ const AdminDashboard: React.FC = () => {
               {/* Schema Definition */}
               {selectedSchema.schemaDefinition && (
                 <div>
-                  <h4 className="text-gray-900 font-semibold mb-3 flex items-center gap-2">
+                  <h4 className="text-gray-900 dark:text-white font-semibold mb-3 flex items-center gap-2">
                     <FileCode className="w-5 h-5" />
                     Schema Definition
                   </h4>
-                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 max-h-96 overflow-y-auto">
+                  <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 border border-gray-200 max-h-96 overflow-y-auto">
                     <pre className="text-sm text-gray-800 overflow-x-auto whitespace-pre-wrap">
                       {(() => {
                         try {
@@ -2014,11 +2146,11 @@ const AdminDashboard: React.FC = () => {
               {/* Example Payload */}
               {selectedSchema.examplePayload && (
                 <div>
-                  <h4 className="text-gray-900 font-semibold mb-3 flex items-center gap-2">
+                  <h4 className="text-gray-900 dark:text-white font-semibold mb-3 flex items-center gap-2">
                     <Database className="w-5 h-5" />
                     Example Payload
                   </h4>
-                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 max-h-96 overflow-y-auto">
+                  <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 border border-gray-200 max-h-96 overflow-y-auto">
                     <pre className="text-sm text-gray-800 overflow-x-auto whitespace-pre-wrap">
                       {(() => {
                         try {
@@ -2058,7 +2190,7 @@ const AdminDashboard: React.FC = () => {
       {/* Edit Schema Modal */}
       {showEditSchemaModal && selectedSchema && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white border border-gray-200 rounded-2xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-2xl font-bold text-gray-900">Edit Schema</h3>
               <button
@@ -2066,7 +2198,7 @@ const AdminDashboard: React.FC = () => {
                   setShowEditSchemaModal(false);
                   setSelectedSchema(null);
                 }}
-                className="text-gray-400 hover:text-gray-900 transition-all text-2xl"
+                className="text-gray-400 hover:text-gray-900 dark:text-white transition-all text-2xl"
               >
                 ✕
               </button>
@@ -2138,7 +2270,7 @@ const AdminDashboard: React.FC = () => {
                   <input
                     type="text"
                     defaultValue={selectedSchema.schemaId || 'Not assigned'}
-                    className="w-full px-4 py-2 bg-gray-100 border border-gray-300 rounded-lg text-gray-500 cursor-not-allowed font-mono"
+                    className="w-full px-4 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 rounded-lg text-gray-500 dark:text-gray-400 cursor-not-allowed font-mono"
                     disabled
                   />
                 </div>
@@ -2151,7 +2283,7 @@ const AdminDashboard: React.FC = () => {
                   <input
                     type="text"
                     defaultValue={selectedSchema.name}
-                    className="w-full px-4 py-2 bg-gray-100 border border-gray-300 rounded-lg text-gray-500 cursor-not-allowed"
+                    className="w-full px-4 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 rounded-lg text-gray-500 dark:text-gray-400 cursor-not-allowed"
                     disabled
                   />
                 </div>
@@ -2165,7 +2297,7 @@ const AdminDashboard: React.FC = () => {
                     type="text"
                     value={editSchemaForm.partnerUserId}
                     onChange={(e) => setEditSchemaForm({ ...editSchemaForm, partnerUserId: e.target.value })}
-                    className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                    className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 rounded-lg text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
                     placeholder="PARTNER-xxxxxxxx"
                   />
                 </div>
@@ -2178,7 +2310,7 @@ const AdminDashboard: React.FC = () => {
                   <input
                     type="text"
                     defaultValue={selectedSchema.eventType}
-                    className="w-full px-4 py-2 bg-gray-100 border border-gray-300 rounded-lg text-gray-500 cursor-not-allowed"
+                    className="w-full px-4 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 rounded-lg text-gray-500 dark:text-gray-400 cursor-not-allowed"
                     disabled
                   />
                 </div>
@@ -2191,7 +2323,7 @@ const AdminDashboard: React.FC = () => {
                   <select
                     value={editSchemaForm.domain}
                     onChange={(e) => setEditSchemaForm({ ...editSchemaForm, domain: e.target.value as 'payment' | 'account' | 'apply' | '' })}
-                    className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Select domain</option>
                     <option value="payment">Payment</option>
@@ -2209,7 +2341,7 @@ const AdminDashboard: React.FC = () => {
                     type="text"
                     value={editSchemaForm.systemUserId}
                     onChange={(e) => setEditSchemaForm({ ...editSchemaForm, systemUserId: e.target.value })}
-                    className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 rounded-lg text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="system_67890"
                   />
                 </div>
@@ -2222,7 +2354,7 @@ const AdminDashboard: React.FC = () => {
                   <input
                     type="text"
                     defaultValue={selectedSchema.version}
-                    className="w-full px-4 py-2 bg-gray-100 border border-gray-300 rounded-lg text-gray-500 cursor-not-allowed"
+                    className="w-full px-4 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 rounded-lg text-gray-500 dark:text-gray-400 cursor-not-allowed"
                     disabled
                   />
                 </div>
@@ -2235,7 +2367,7 @@ const AdminDashboard: React.FC = () => {
                   <select
                     value={editSchemaForm.status}
                     onChange={(e) => setEditSchemaForm({ ...editSchemaForm, status: e.target.value as 'active' | 'deprecated' | 'disabled' })}
-                    className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="active">Active</option>
                     <option value="deprecated">Deprecated</option>
@@ -2251,7 +2383,7 @@ const AdminDashboard: React.FC = () => {
                   <textarea
                     value={editSchemaForm.schemaDefinition}
                     onChange={(e) => setEditSchemaForm({ ...editSchemaForm, schemaDefinition: e.target.value })}
-                    className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                    className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
                     rows={10}
                     placeholder='{"type": "object", "properties": {...}}'
                   />
@@ -2265,7 +2397,7 @@ const AdminDashboard: React.FC = () => {
                   <textarea
                     value={editSchemaForm.examplePayload}
                     onChange={(e) => setEditSchemaForm({ ...editSchemaForm, examplePayload: e.target.value })}
-                    className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                    className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
                     rows={10}
                     placeholder='{"userId": "12345", "amount": 100}'
                   />
@@ -2273,7 +2405,7 @@ const AdminDashboard: React.FC = () => {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center gap-4 pt-4 border-t border-gray-200">
+              <div className="flex items-center gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                 <button
                   type="submit"
                   className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all font-medium shadow-sm"
@@ -2286,12 +2418,343 @@ const AdminDashboard: React.FC = () => {
                     setShowEditSchemaModal(false);
                     setSelectedSchema(null);
                   }}
-                  className="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all"
+                  className="px-6 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 transition-all"
                 >
                   Cancel
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Multi-Step Schema Registration Modal */}
+      {showNewSchemaModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-8">
+              {/* Progress Indicator */}
+              <div className="mb-8">
+                <div className="flex items-center justify-between relative">
+                  {/* Progress Line */}
+                  <div className="absolute top-6 left-0 right-0 h-0.5 bg-gray-200 dark:bg-gray-700" style={{ zIndex: 0 }}></div>
+                  <div className="absolute top-6 left-0 h-0.5 bg-blue-600 transition-all duration-300" style={{ width: `${((schemaRegistrationStep - 1) / 3) * 100}%`, zIndex: 0 }}></div>
+
+                  {[1, 2, 3, 4].map((step) => (
+                    <div key={step} className="flex flex-col items-center relative" style={{ zIndex: 1 }}>
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg transition-all ${
+                        schemaRegistrationStep > step
+                          ? 'bg-blue-600 text-white'
+                          : schemaRegistrationStep === step
+                          ? 'bg-blue-600 text-white ring-4 ring-blue-100 dark:ring-blue-900'
+                          : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                      }`}>
+                        {schemaRegistrationStep > step ? <Check className="w-6 h-6" /> : step}
+                      </div>
+                      <p className={`mt-2 text-sm font-medium ${
+                        schemaRegistrationStep >= step ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'
+                      }`}>
+                        {step === 1 && 'Basic Info'}
+                        {step === 2 && 'Event Config'}
+                        {step === 3 && 'Payload Schema'}
+                        {step === 4 && 'Review'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                if (schemaRegistrationStep < 4) {
+                  setSchemaRegistrationStep(schemaRegistrationStep + 1);
+                } else {
+                  try {
+                    const response = await schemaAPI.register({
+                      name: newSchemaForm.name,
+                      eventType: newSchemaForm.eventType,
+                      version: newSchemaForm.version,
+                      schemaFormat: newSchemaForm.schemaFormat,
+                      schemaDefinition: JSON.parse(newSchemaForm.schemaDefinition),
+                      description: newSchemaForm.description,
+                      isPublic: newSchemaForm.isPublic,
+                      domain: newSchemaForm.domain || undefined,
+                      systemUserId: newSchemaForm.systemUserId || undefined,
+                      examplePayload: newSchemaForm.examplePayload ? JSON.parse(newSchemaForm.examplePayload) : undefined,
+                    });
+                    toast.success('Schema registered successfully!');
+                    setShowNewSchemaModal(false);
+                    fetchSchemas();
+                  } catch (error: any) {
+                    toast.error(error.response?.data?.error || 'Failed to register schema');
+                  }
+                }
+              }}>
+                {/* Step 1: Basic Info */}
+                {schemaRegistrationStep === 1 && (
+                  <div className="space-y-6">
+                    <div>
+                      <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Basic Information</h3>
+                      <p className="text-gray-600 dark:text-gray-400">Enter basic information about your webhook schema</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Schema Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={newSchemaForm.name}
+                        onChange={(e) => setNewSchemaForm({ ...newSchemaForm, name: e.target.value })}
+                        className="w-full px-4 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="e.g., Payment Created"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Description
+                      </label>
+                      <textarea
+                        value={newSchemaForm.description}
+                        onChange={(e) => setNewSchemaForm({ ...newSchemaForm, description: e.target.value })}
+                        className="w-full px-4 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Describe the purpose of this schema..."
+                        rows={3}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Version *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={newSchemaForm.version}
+                        onChange={(e) => setNewSchemaForm({ ...newSchemaForm, version: e.target.value })}
+                        className="w-full px-4 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="1.0.0"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 2: Event Config */}
+                {schemaRegistrationStep === 2 && (
+                  <div className="space-y-6">
+                    <div>
+                      <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Event Configuration</h3>
+                      <p className="text-gray-600 dark:text-gray-400">Configure event type and category</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Event Type *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={newSchemaForm.eventType}
+                        onChange={(e) => setNewSchemaForm({ ...newSchemaForm, eventType: e.target.value })}
+                        className="w-full px-4 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="e.g., payment.created"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Domain *
+                      </label>
+                      <select
+                        required
+                        value={newSchemaForm.domain}
+                        onChange={(e) => setNewSchemaForm({ ...newSchemaForm, domain: e.target.value as any })}
+                        className="w-full px-4 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Select domain</option>
+                        <option value="payment">Payment</option>
+                        <option value="account">Account</option>
+                        <option value="apply">Apply</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Schema Format *
+                      </label>
+                      <select
+                        required
+                        value={newSchemaForm.schemaFormat}
+                        onChange={(e) => setNewSchemaForm({ ...newSchemaForm, schemaFormat: e.target.value })}
+                        className="w-full px-4 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="json">JSON Schema</option>
+                        <option value="avro">Avro</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 3: Payload Schema */}
+                {schemaRegistrationStep === 3 && (
+                  <div className="space-y-6">
+                    <div>
+                      <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Payload Schema</h3>
+                      <p className="text-gray-600 dark:text-gray-400">Define the JSON schema for webhook payload</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        System User ID
+                      </label>
+                      <input
+                        type="text"
+                        value={newSchemaForm.systemUserId}
+                        onChange={(e) => setNewSchemaForm({ ...newSchemaForm, systemUserId: e.target.value })}
+                        className="w-full px-4 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Optional system user identifier"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Schema Definition (JSON) *
+                      </label>
+                      <textarea
+                        required
+                        value={newSchemaForm.schemaDefinition}
+                        onChange={(e) => setNewSchemaForm({ ...newSchemaForm, schemaDefinition: e.target.value })}
+                        className="w-full px-4 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                        rows={10}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Example Payload (JSON)
+                      </label>
+                      <textarea
+                        value={newSchemaForm.examplePayload}
+                        onChange={(e) => setNewSchemaForm({ ...newSchemaForm, examplePayload: e.target.value })}
+                        className="w-full px-4 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                        placeholder='{\n  "example": "value"\n}'
+                        rows={6}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 4: Review */}
+                {schemaRegistrationStep === 4 && (
+                  <div className="space-y-6">
+                    <div>
+                      <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Review Configuration</h3>
+                      <p className="text-gray-600 dark:text-gray-400">Review and confirm your schema configuration</p>
+                    </div>
+
+                    <div className="space-y-6">
+                      <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-6">
+                        <h4 className="font-semibold text-gray-900 dark:text-white mb-4">Basic Information</h4>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-gray-600 dark:text-gray-400">Name:</span>
+                            <span className="font-medium text-gray-900 dark:text-white">{newSchemaForm.name}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600 dark:text-gray-400">Version:</span>
+                            <span className="font-medium text-gray-900 dark:text-white">{newSchemaForm.version}</span>
+                          </div>
+                          {newSchemaForm.description && (
+                            <div className="flex justify-between">
+                              <span className="text-gray-600 dark:text-gray-400">Description:</span>
+                              <span className="font-medium text-gray-900 dark:text-white text-right max-w-md">{newSchemaForm.description}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-6">
+                        <h4 className="font-semibold text-gray-900 dark:text-white mb-4">Event Configuration</h4>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-gray-600 dark:text-gray-400">Event Type:</span>
+                            <span className="font-medium text-gray-900 dark:text-white">{newSchemaForm.eventType}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600 dark:text-gray-400">Domain:</span>
+                            <span className="font-medium text-gray-900 dark:text-white capitalize">{newSchemaForm.domain}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600 dark:text-gray-400">Schema Format:</span>
+                            <span className="font-medium text-gray-900 dark:text-white uppercase">{newSchemaForm.schemaFormat}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-6">
+                        <h4 className="font-semibold text-gray-900 dark:text-white mb-4">Payload Schema</h4>
+                        <div className="space-y-2 text-sm">
+                          {newSchemaForm.systemUserId && (
+                            <div className="flex justify-between">
+                              <span className="text-gray-600 dark:text-gray-400">System User ID:</span>
+                              <span className="font-medium text-gray-900 dark:text-white">{newSchemaForm.systemUserId}</span>
+                            </div>
+                          )}
+                          <div>
+                            <span className="text-gray-600 dark:text-gray-400">Schema Definition:</span>
+                            <pre className="mt-2 p-3 bg-gray-900 text-gray-100 rounded text-xs overflow-x-auto">{newSchemaForm.schemaDefinition}</pre>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Navigation Buttons */}
+                <div className="flex items-center justify-between mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+                  <div className="flex gap-3">
+                    {schemaRegistrationStep > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setSchemaRegistrationStep(schemaRegistrationStep - 1)}
+                        className="px-6 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-all flex items-center gap-2"
+                      >
+                        <ArrowLeft className="w-5 h-5" />
+                        Back
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowNewSchemaModal(false);
+                        setSchemaRegistrationStep(1);
+                      }}
+                      className="px-6 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-all"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  <button
+                    type="submit"
+                    className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all flex items-center gap-2 shadow-sm"
+                  >
+                    {schemaRegistrationStep < 4 ? (
+                      <>
+                        Next
+                        <ArrowRight className="w-5 h-5" />
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-5 h-5" />
+                        Register Schema
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}

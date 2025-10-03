@@ -1,0 +1,42 @@
+# Local Development Environment Variables
+# Copy this to .env for local development
+
+# Database Configuration
+DATABASE_HOST=localhost
+DATABASE_PORT=5432
+DATABASE_NAME=webhook_db
+DATABASE_USER=webhook_user
+DATABASE_PASSWORD=webhook_password
+DATABASE_SSL=false
+
+# Kafka Configuration
+KAFKA_BROKERS=localhost:9092
+KAFKA_CLIENT_ID=webhook-system-local
+KAFKA_GROUP_ID=webhook-consumers-local
+KAFKA_TOPIC_EVENTS=delivery-messages
+KAFKA_TOPIC_RETRY=retry-messages
+KAFKA_TOPIC_DLQ=dlq-messages
+KAFKA_TOPIC_NOTIFICATIONS=status-notifications
+
+# AWS Configuration (for local development, these can be mock values)
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=local-dev-key
+AWS_SECRET_ACCESS_KEY=local-dev-secret
+
+# AWS Glue Schema Registry (for local, we'll skip validation)
+SCHEMA_REGISTRY_NAME=webhook-schemas-local
+SKIP_SCHEMA_REGISTRY=true
+
+# AWS SES (for local, we'll just log emails)
+SES_SENDER_EMAIL=noreply@webhook.local
+SKIP_EMAIL_SENDING=true
+
+# API Configuration
+API_PORT=3000
+API_BASE_URL=http://localhost:3000
+
+# Docs URL
+DOCS_URL=http://localhost:3000/docs
+
+# Node Environment
+NODE_ENV=development

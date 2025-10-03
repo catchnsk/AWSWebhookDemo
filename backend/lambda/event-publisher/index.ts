@@ -9,6 +9,7 @@ import { publishMessage } from '../../shared/utils/kafka';
 import { successResponse, ErrorResponses, corsPreflightResponse } from '../../shared/utils/response';
 import { initializeDatabase } from '../../shared/utils/database';
 import { v4 as uuidv4 } from 'uuid';
+import { getAdminByApiKey } from '../../shared/models/admin';
 
 /**
  * Lambda handler for event publishing
@@ -38,17 +39,18 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return ErrorResponses.badRequest('Method not allowed');
     }
 
-    // Extract API key from Authorization header
-    const apiKey = event.headers['Authorization']?.replace('Bearer ', '');
+    // Extract API key from Authorization header or X-API-Key header
+    const apiKey = event.headers['Authorization']?.replace('Bearer ', '') || event.headers['X-API-Key'] || event.headers['x-api-key'];
 
     if (!apiKey) {
       return ErrorResponses.unauthorized('API key is required');
     }
 
-    // Validate producer
+    // Validate producer OR admin (admin can publish test events)
     const producer = await getProducerByApiKey(apiKey);
+    const admin = producer ? null : await getAdminByApiKey(apiKey);
 
-    if (!producer) {
+    if (!producer && !admin) {
       return ErrorResponses.unauthorized('Invalid API key');
     }
 
@@ -78,18 +80,46 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return ErrorResponses.notFound('Schema', `eventType: ${requestBody.eventType}`);
     }
 
-    // Verify producer owns this schema
-    if (schema.producer_id !== producer.id) {
+    // Verify producer owns this schema (skip for admin test events)
+    if (producer && schema.producer_id !== producer.id) {
       return ErrorResponses.forbidden('You do not have permission to publish events for this schema');
     }
 
-    // Step 2: Validate payload against schema from Schema Registry
+    // Step 2: Validate payload against schema
     console.log('Validating payload against schema...');
-    const schemaValidation = await validateAgainstSchema(
-      schema.name,
-      requestBody.payload,
-      schema.schema_registry_version
-    );
+
+    // For local development, validate against schema definition from DB if AWS creds not available
+    let schemaValidation;
+    if (schema.schema_definition) {
+      // Use local schema definition
+      try {
+        const Ajv = require('ajv');
+        const ajv = new Ajv({ allErrors: true });
+        const validate = ajv.compile(schema.schema_definition);
+        const valid = validate(requestBody.payload);
+
+        if (!valid && validate.errors) {
+          const errors = validate.errors.map((err: any) => `${err.instancePath || '/'}: ${err.message}`);
+          schemaValidation = { valid: false, errors };
+        } else {
+          schemaValidation = { valid: true, errors: [] };
+        }
+      } catch (error: any) {
+        console.log('Local schema validation failed, trying Schema Registry');
+        schemaValidation = await validateAgainstSchema(
+          schema.name,
+          requestBody.payload,
+          schema.schema_registry_version
+        );
+      }
+    } else {
+      // Use AWS Glue Schema Registry
+      schemaValidation = await validateAgainstSchema(
+        schema.name,
+        requestBody.payload,
+        schema.schema_registry_version
+      );
+    }
 
     if (!schemaValidation.valid) {
       return ErrorResponses.unprocessableEntity(
@@ -100,24 +130,11 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     console.log('Payload validation successful');
 
-    // Step 3: Fetch all active subscriptions for this schema
-    console.log('Fetching active subscriptions...');
-    const subscriptions = await listActiveSubscriptionsForSchema(schema.id);
-
-    console.log(`Found ${subscriptions.length} active subscriptions`);
-
-    if (subscriptions.length === 0) {
-      return successResponse({
-        message: 'Event validated but no active subscriptions found',
-        eventType: requestBody.eventType,
-        subscriptionCount: 0,
-      });
-    }
-
-    // Step 4: Create event message record
+    // Step 3: Create event message record (always create, even without subscriptions)
+    // Use schema's producer_id for admin test events (admins can test any schema)
     console.log('Creating event message record...');
     const eventMessage = await createEventMessage({
-      producer_id: producer.id,
+      producer_id: producer?.id || schema.producer_id,
       schema_id: schema.id,
       event_type: requestBody.eventType,
       payload: requestBody.payload,
@@ -126,6 +143,34 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     });
 
     console.log('Event message created:', eventMessage.event_id);
+
+    // Step 4: Fetch all active subscriptions for this schema
+    console.log('Fetching active subscriptions...');
+    const subscriptions = await listActiveSubscriptionsForSchema(schema.id);
+
+    console.log(`Found ${subscriptions.length} active subscriptions`);
+
+    if (subscriptions.length === 0) {
+      // Increment producer and schema counters (only for real producers, not admin test)
+      if (producer) {
+        await Promise.all([
+          incrementEventPublishedCount(producer.id),
+          incrementSchemaEventCount(schema.id),
+        ]);
+      } else {
+        // For admin test events, only increment schema counter
+        await incrementSchemaEventCount(schema.id);
+      }
+
+      return successResponse({
+        eventId: eventMessage.event_id,
+        eventType: requestBody.eventType,
+        subscriberCount: 0,
+        deliveriesQueued: 0,
+        publishedAt: eventMessage.published_at,
+        message: 'Event validated but no active subscriptions found',
+      }, 202);
+    }
 
     // Step 5: Publish to Kafka delivery-messages topic for each subscription
     console.log('Publishing to Kafka delivery-messages topic...');
@@ -183,11 +228,16 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       deliveries_queued: subscriptions.length,
     });
 
-    // Increment producer and schema counters
-    await Promise.all([
-      incrementEventPublishedCount(producer.id),
-      incrementSchemaEventCount(schema.id),
-    ]);
+    // Increment producer and schema counters (only for real producers, not admin test)
+    if (producer) {
+      await Promise.all([
+        incrementEventPublishedCount(producer.id),
+        incrementSchemaEventCount(schema.id),
+      ]);
+    } else {
+      // For admin test events, only increment schema counter
+      await incrementSchemaEventCount(schema.id);
+    }
 
     console.log('Event published successfully to all subscriptions');
 

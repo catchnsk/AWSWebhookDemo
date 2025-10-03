@@ -256,7 +256,7 @@ export const eventAPI = {
 
   list: async (params?: { page?: number; limit?: number }): Promise<{ events: EventMessage[]; total: number }> => {
     const response = await api.get('/events', { params });
-    return response.data;
+    return response.data.data || response.data;
   },
 
   getDeliveryLogs: async (eventId: string): Promise<{ deliveries: DeliveryLog[]; total: number }> => {

@@ -27,6 +27,7 @@ import { handler as producerOnboardingHandler } from './lambda/producer-onboardi
 import { handler as schemaAdminHandler } from './lambda/schema-admin/index';
 import { handler as subscriptionAdminHandler } from './lambda/subscription-admin/index';
 import { handler as eventPublisherHandler } from './lambda/event-publisher/index';
+import { handler as eventAdminHandler } from './lambda/event-admin/index';
 import { handler as adminUserManagerHandler } from './lambda/admin-user-manager/index';
 import { handler as adminAuthHandler } from './lambda/admin-auth/index';
 
@@ -224,8 +225,7 @@ app.post('/api/v1/events/publish', async (req, res) => {
 });
 
 app.get('/api/v1/events', async (req, res) => {
-  // Return empty events list for now
-  res.json({ success: true, data: { events: [], total: 0 } });
+  await lambdaWrapper(eventAdminHandler, req, res);
 });
 
 // ============================================================================
