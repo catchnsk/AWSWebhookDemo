@@ -22,6 +22,11 @@ import {
   Clock,
   ChevronRight,
   Plus,
+  FlaskConical,
+  Send,
+  X,
+  CheckCircle,
+  XCircle,
 } from 'lucide-react';
 import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import toast from 'react-hot-toast';
@@ -39,7 +44,7 @@ interface Stats {
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { clearAuth, userName, userRole } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<'overview' | 'schemas' | 'subscriptions' | 'events' | 'dlq' | 'users'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'schemas' | 'subscriptions' | 'events' | 'dlq' | 'users' | 'test-event'>('overview');
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<Stats>({
     totalSchemas: 0,
@@ -57,12 +62,12 @@ const AdminDashboard: React.FC = () => {
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
-  const [newUserForm, setNewUserForm] = useState({ name: '', email: '', password: '', role: 'admin' as 'super_admin' | 'admin' | 'viewer' });
+  const [newUserForm, setNewUserForm] = useState({ name: '', email: '', password: '', role: 'admin' as 'super_admin' | 'admin' | 'viewer' | 'tester' | 'rtb' });
   const [generatedApiKey, setGeneratedApiKey] = useState<string | null>(null);
   const [showEditUserModal, setShowEditUserModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [editUserForm, setEditUserForm] = useState({
-    role: 'admin' as 'super_admin' | 'admin' | 'viewer',
+    role: 'admin' as 'super_admin' | 'admin' | 'viewer' | 'tester' | 'rtb',
     password: '',
     status: 'active'
   });
@@ -100,6 +105,16 @@ const AdminDashboard: React.FC = () => {
     maxRetries: 3,
     backoffStrategy: 'exponential'
   });
+  const [testEventForm, setTestEventForm] = useState({
+    eventType: '',
+    payload: '{\n  \n}'
+  });
+  const [testEventResult, setTestEventResult] = useState<{
+    success: boolean;
+    message: string;
+    eventId?: string;
+    deliveriesQueued?: number;
+  } | null>(null);
 
   // Mock data for charts - with realistic trends
   const [eventsOverTime] = useState([
@@ -131,6 +146,10 @@ const AdminDashboard: React.FC = () => {
     // Users tab: Only super_admin and admin
     if (tab === 'users') {
       return userRole === 'super_admin' || userRole === 'admin';
+    }
+    // Test Event tab: Only super_admin, admin, and tester
+    if (tab === 'test-event') {
+      return userRole === 'super_admin' || userRole === 'admin' || userRole === 'tester';
     }
     // All other tabs: accessible to all roles
     return true;
@@ -444,6 +463,20 @@ const AdminDashboard: React.FC = () => {
               {activeTab === 'dlq' && <ChevronRight className="w-4 h-4 ml-auto" />}
             </button>
           )}
+          {canAccessTab('test-event') && (
+            <button
+              onClick={() => setActiveTab('test-event')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+                activeTab === 'test-event'
+                  ? 'bg-white text-blue-700 shadow-lg font-semibold'
+                  : 'text-blue-100 hover:bg-white/10 hover:text-white'
+              }`}
+            >
+              <FlaskConical className="w-5 h-5" />
+              <span className="font-medium">Test Event</span>
+              {activeTab === 'test-event' && <ChevronRight className="w-4 h-4 ml-auto" />}
+            </button>
+          )}
           {canAccessTab('users') && (
             <button
               onClick={() => setActiveTab('users')}
@@ -472,6 +505,7 @@ const AdminDashboard: React.FC = () => {
               {activeTab === 'subscriptions' && 'Subscribers'}
               {activeTab === 'events' && 'Events'}
               {activeTab === 'dlq' && 'Dead Letter Queue'}
+              {activeTab === 'test-event' && 'Test Event'}
               {activeTab === 'users' && 'Users'}
             </h2>
             <p className="text-gray-600">Welcome back, {userName}</p>
@@ -771,43 +805,45 @@ const AdminDashboard: React.FC = () => {
                               <FileCode className="w-4 h-4" />
                               View
                             </button>
-                            <button
-                              onClick={async () => {
-                                try {
-                                  // Fetch full schema details for editing
-                                  const response = await fetch(`http://localhost:3000/api/v1/schemas/${schema.id}`, {
-                                    headers: {
-                                      'X-API-Key': localStorage.getItem('apiKey') || ''
-                                    }
-                                  });
-                                  const result = await response.json();
-                                  const schemaData = result.data || result;
+                            {canEdit() && (
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    // Fetch full schema details for editing
+                                    const response = await fetch(`http://localhost:3000/api/v1/schemas/${schema.id}`, {
+                                      headers: {
+                                        'X-API-Key': localStorage.getItem('apiKey') || ''
+                                      }
+                                    });
+                                    const result = await response.json();
+                                    const schemaData = result.data || result;
 
-                                  setSelectedSchema(schemaData);
-                                  setEditSchemaForm({
-                                    domain: schemaData.domain || '',
-                                    partnerUserId: schemaData.partnerUserId || '',
-                                    systemUserId: schemaData.systemUserId || '',
-                                    status: schemaData.status || 'active',
-                                    schemaDefinition: typeof schemaData.schemaDefinition === 'string'
-                                      ? schemaData.schemaDefinition
-                                      : JSON.stringify(schemaData.schemaDefinition, null, 2),
-                                    examplePayload: schemaData.examplePayload
-                                      ? (typeof schemaData.examplePayload === 'string'
-                                          ? schemaData.examplePayload
-                                          : JSON.stringify(schemaData.examplePayload, null, 2))
-                                      : ''
-                                  });
-                                  setShowEditSchemaModal(true);
-                                } catch (error) {
-                                  console.error('Error fetching schema for edit:', error);
-                                  toast.error('Failed to load schema details');
-                                }
-                              }}
-                              className="px-3 py-1.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-all text-sm"
-                            >
-                              Edit
-                            </button>
+                                    setSelectedSchema(schemaData);
+                                    setEditSchemaForm({
+                                      domain: schemaData.domain || '',
+                                      partnerUserId: schemaData.partnerUserId || '',
+                                      systemUserId: schemaData.systemUserId || '',
+                                      status: schemaData.status || 'active',
+                                      schemaDefinition: typeof schemaData.schemaDefinition === 'string'
+                                        ? schemaData.schemaDefinition
+                                        : JSON.stringify(schemaData.schemaDefinition, null, 2),
+                                      examplePayload: schemaData.examplePayload
+                                        ? (typeof schemaData.examplePayload === 'string'
+                                            ? schemaData.examplePayload
+                                            : JSON.stringify(schemaData.examplePayload, null, 2))
+                                        : ''
+                                    });
+                                    setShowEditSchemaModal(true);
+                                  } catch (error) {
+                                    console.error('Error fetching schema for edit:', error);
+                                    toast.error('Failed to load schema details');
+                                  }
+                                }}
+                                className="px-3 py-1.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-all text-sm"
+                              >
+                                Edit
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1063,26 +1099,30 @@ const AdminDashboard: React.FC = () => {
                         </td>
                         <td className="py-4 px-4">
                           <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => {
-                                setSelectedUser(user);
-                                setEditUserForm({
-                                  role: user.role,
-                                  password: '',
-                                  status: user.status
-                                });
-                                setShowEditUserModal(true);
-                              }}
-                              className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all shadow-sm"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDeleteUser(user.id)}
-                              className="px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all shadow-sm"
-                            >
-                              Delete
-                            </button>
+                            {canEdit() && (
+                              <button
+                                onClick={() => {
+                                  setSelectedUser(user);
+                                  setEditUserForm({
+                                    role: user.role,
+                                    password: '',
+                                    status: user.status
+                                  });
+                                  setShowEditUserModal(true);
+                                }}
+                                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all shadow-sm"
+                              >
+                                Edit
+                              </button>
+                            )}
+                            {canEdit() && (
+                              <button
+                                onClick={() => handleDeleteUser(user.id)}
+                                className="px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all shadow-sm"
+                              >
+                                Delete
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1094,6 +1134,184 @@ const AdminDashboard: React.FC = () => {
                     No users found
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Test Event Tab */}
+        {activeTab === 'test-event' && (
+          <div className="space-y-6">
+            <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-lg">
+              <div className="mb-6">
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">Test Webhook Event</h3>
+                <p className="text-gray-600">Send a test event to verify your webhook configuration and schema validation</p>
+              </div>
+
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setTestEventResult(null); // Clear previous results
+
+                // Validate event type
+                if (!testEventForm.eventType || testEventForm.eventType.trim() === '') {
+                  setTestEventResult({
+                    success: false,
+                    message: 'Please select an event type'
+                  });
+                  return;
+                }
+
+                // Validate payload is not empty
+                if (!testEventForm.payload || testEventForm.payload.trim() === '' || testEventForm.payload.trim() === '{\n  \n}') {
+                  setTestEventResult({
+                    success: false,
+                    message: 'Please enter a valid JSON payload'
+                  });
+                  return;
+                }
+
+                try {
+                  // Parse JSON payload
+                  let payload;
+                  try {
+                    payload = JSON.parse(testEventForm.payload);
+                  } catch (error) {
+                    setTestEventResult({
+                      success: false,
+                      message: 'Invalid JSON in payload'
+                    });
+                    return;
+                  }
+
+                  const response = await eventAPI.publish({
+                    eventType: testEventForm.eventType,
+                    payload,
+                    idempotencyKey: `test-${Date.now()}`
+                  });
+
+                  setTestEventResult({
+                    success: true,
+                    message: `Event successfully sent to ${response.deliveriesQueued} ${response.deliveriesQueued === 1 ? 'subscriber' : 'subscribers'}`,
+                    eventId: response.eventId,
+                    deliveriesQueued: response.deliveriesQueued
+                  });
+
+                } catch (error: any) {
+                  const errorMsg = error.response?.data?.message || 'Failed to publish test event';
+                  setTestEventResult({
+                    success: false,
+                    message: errorMsg
+                  });
+                }
+              }} className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Event Type</label>
+                  <select
+                    value={testEventForm.eventType}
+                    onChange={(e) => setTestEventForm({ ...testEventForm, eventType: e.target.value })}
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  >
+                    <option value="">Select an event type</option>
+                    {schemas.map((schema) => (
+                      <option key={schema.id} value={schema.eventType}>
+                        {schema.eventType} (v{schema.version})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-2 text-sm text-gray-500">Select a registered schema to test</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Payload (JSON)</label>
+                  <textarea
+                    value={testEventForm.payload}
+                    onChange={(e) => setTestEventForm({ ...testEventForm, payload: e.target.value })}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                    rows={15}
+                    placeholder='{\n  "key": "value"\n}'
+                  />
+                  <p className="mt-2 text-sm text-gray-500">Enter the event payload as JSON</p>
+                </div>
+
+                {/* Result Indicator */}
+                {testEventResult && (
+                  <div className={`p-4 rounded-lg border ${
+                    testEventResult.success
+                      ? 'bg-green-50 border-green-200'
+                      : 'bg-red-50 border-red-200'
+                  }`}>
+                    <div className="flex items-start gap-3">
+                      {testEventResult.success ? (
+                        <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-0.5" />
+                      ) : (
+                        <XCircle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
+                      )}
+                      <div className="flex-1">
+                        <p className={`font-semibold ${
+                          testEventResult.success ? 'text-green-900' : 'text-red-900'
+                        }`}>
+                          {testEventResult.success ? 'Success!' : 'Failed'}
+                        </p>
+                        <p className={`text-sm mt-1 ${
+                          testEventResult.success ? 'text-green-700' : 'text-red-700'
+                        }`}>
+                          {testEventResult.message}
+                        </p>
+                        {testEventResult.eventId && (
+                          <p className="text-xs text-green-600 mt-2 font-mono">
+                            Event ID: {testEventResult.eventId}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    type="submit"
+                    className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all shadow-sm font-medium flex items-center gap-2"
+                  >
+                    <Send className="w-4 h-4" />
+                    Send Test Event
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setTestEventForm({
+                        eventType: '',
+                        payload: '{\n  \n}'
+                      });
+                      setTestEventResult(null);
+                    }}
+                    className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all font-medium flex items-center gap-2"
+                  >
+                    <X className="w-4 h-4" />
+                    Clear
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Recent test events - optional enhancement */}
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-6">
+              <div className="flex items-start gap-3">
+                <div className="bg-blue-600 p-2 rounded-lg">
+                  <FlaskConical className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-1">Testing Tips</h4>
+                  <ul className="text-sm text-gray-700 space-y-1">
+                    <li>• Make sure you have active subscriptions for the selected event type</li>
+                    <li>• Use the schema definition to ensure your payload matches the expected format</li>
+                    <li>• Check the Events tab to see delivery status and webhook responses</li>
+                    <li>• Failed deliveries will appear in the Dead Letter Queue</li>
+                  </ul>
+                </div>
               </div>
             </div>
           </div>
@@ -1142,12 +1360,14 @@ const AdminDashboard: React.FC = () => {
                 <label className="text-gray-400 text-sm mb-2 block">Role</label>
                 <select
                   value={newUserForm.role}
-                  onChange={(e) => setNewUserForm({ ...newUserForm, role: e.target.value as 'super_admin' | 'admin' | 'viewer' })}
+                  onChange={(e) => setNewUserForm({ ...newUserForm, role: e.target.value as 'super_admin' | 'admin' | 'viewer' | 'tester' | 'rtb' })}
                   className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
                 >
                   <option value="admin">Admin</option>
                   <option value="super_admin">Super Admin</option>
                   <option value="viewer">Viewer</option>
+                  <option value="tester">Tester</option>
+                  <option value="rtb">RTB</option>
                 </select>
               </div>
               <div className="flex gap-3 mt-6">
@@ -1291,12 +1511,14 @@ const AdminDashboard: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
                 <select
                   value={editUserForm.role}
-                  onChange={(e) => setEditUserForm({ ...editUserForm, role: e.target.value as 'super_admin' | 'admin' | 'viewer' })}
+                  onChange={(e) => setEditUserForm({ ...editUserForm, role: e.target.value as 'super_admin' | 'admin' | 'viewer' | 'tester' | 'rtb' })}
                   className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="admin">Admin</option>
                   <option value="super_admin">Super Admin</option>
                   <option value="viewer">Viewer</option>
+                  <option value="tester">Tester</option>
+                  <option value="rtb">RTB</option>
                 </select>
               </div>
 
