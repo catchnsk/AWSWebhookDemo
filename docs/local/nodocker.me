@@ -1,0 +1,155 @@
+Prerequisites
+
+  1. Node.js (v16 or higher)
+  2. PostgreSQL (v12 or higher) installed locally
+  3. npm or yarn package manager
+
+  Setup Instructions
+
+  1. Database Setup (PostgreSQL)
+
+  Start PostgreSQL service:
+  # macOS (if installed via Homebrew)
+  brew services start postgresql
+
+  # Linux
+  sudo service postgresql start
+
+  # Windows
+  # Start PostgreSQL from Services or pgAdmin
+
+  Create database and user:
+  # Connect to PostgreSQL
+  psql postgres
+
+  # Run these SQL commands:
+  CREATE DATABASE webhook_db;
+  CREATE USER webhook_user WITH PASSWORD 'webhook_password';
+  GRANT ALL PRIVILEGES ON DATABASE webhook_db TO webhook_user;
+  \q
+
+  Run database migrations:
+  cd /Users/sobhan/Claud/FAMILY-ACTIVITY-DEMO
+
+  # Run migrations in order
+  psql -h localhost -U webhook_user -d webhook_db -f
+  database/migrations/001_initial_schema.sql
+  psql -h localhost -U webhook_user -d webhook_db -f
+  database/migrations/002_add_schema_fields.sql
+  psql -h localhost -U webhook_user -d webhook_db -f
+  database/migrations/003_admin_users.sql
+
+  2. Backend Setup
+
+  Navigate to backend directory:
+  cd /Users/sobhan/Claud/FAMILY-ACTIVITY-DEMO/backend
+
+  Install dependencies:
+  npm install
+
+  Create .env file in backend directory:
+  cat > .env << 'EOF'
+  NODE_ENV=development
+  API_PORT=3000
+
+  # PostgreSQL Configuration
+  DATABASE_HOST=localhost
+  DATABASE_PORT=5432
+  DATABASE_NAME=webhook_db
+  DATABASE_USER=webhook_user
+  DATABASE_PASSWORD=webhook_password
+
+  # Kafka Configuration (optional - can skip if not using Kafka)
+  KAFKA_BROKERS=localhost:9092
+  KAFKA_TOPIC_EVENTS=delivery-messages
+  KAFKA_CONSUMER_GROUP=webhook-delivery-consumer
+
+  # AWS Configuration (optional - can skip for local development)
+  # AWS_REGION=us-east-1
+  # AWS_ACCESS_KEY_ID=your-key
+  # AWS_SECRET_ACCESS_KEY=your-secret
+  EOF
+
+  Start the backend server:
+  npm run dev:api
+
+  The backend API will start on http://localhost:3000
+
+  3. Frontend Setup
+
+  Open a new terminal and navigate to frontend directory:
+  cd /Users/sobhan/Claud/FAMILY-ACTIVITY-DEMO/frontend
+
+  Install dependencies:
+  npm install
+
+  Create .env file in frontend directory:
+  cat > .env << 'EOF'
+  VITE_API_BASE_URL=http://localhost:3000/api/v1
+  EOF
+
+  Start the frontend development server:
+  npm run dev
+
+  The frontend will start on http://localhost:3001
+
+  4. Create Initial Admin User
+
+  Open a new terminal and run:
+  cd /Users/sobhan/Claud/FAMILY-ACTIVITY-DEMO/backend
+
+  # Create admin user via API
+  curl -X POST http://localhost:3000/api/v1/admin/users \
+    -H "Content-Type: application/json" \
+    -d '{
+      "name": "Admin User",
+      "email": "admin@example.com",
+      "password": "admin123",
+      "role": "super_admin"
+    }'
+
+  Save the API key returned in the response!
+
+  5. Access the Application
+
+  1. Open browser: Navigate to http://localhost:3001
+  2. Login: Use the email and password you just created
+  3. API Key: The API key from step 4 will be used automatically after login
+
+  Stopping the Application
+
+  Stop backend:
+  # Press Ctrl+C in the backend terminal
+
+  Stop frontend:
+  # Press Ctrl+C in the frontend terminal
+
+  Stop PostgreSQL (optional):
+  # macOS
+  brew services stop postgresql
+
+  # Linux
+  sudo service postgresql stop
+
+  Troubleshooting
+
+  Port already in use:
+  # Kill process on port 3000 (backend)
+  lsof -i :3000 | grep LISTEN | awk '{print $2}' | xargs kill
+
+  # Kill process on port 3001 (frontend)
+  lsof -i :3001 | grep LISTEN | awk '{print $2}' | xargs kill
+
+  Database connection issues:
+  - Verify PostgreSQL is running: psql -h localhost -U webhook_user -d webhook_db
+  - Check credentials in .env match your database setup
+  - Ensure database webhook_db exists
+
+  Missing dependencies:
+  # Backend
+  cd backend && npm install
+
+  # Frontend
+  cd frontend && npm install
+
+  That's it! Your application should now be running locally without Docker.
