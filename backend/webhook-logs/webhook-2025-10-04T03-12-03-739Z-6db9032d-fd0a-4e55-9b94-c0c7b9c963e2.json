@@ -1,0 +1,28 @@
+{
+  "requestId": "6db9032d-fd0a-4e55-9b94-c0c7b9c963e2",
+  "timestamp": "2025-10-04T03:12:03.739Z",
+  "method": "POST",
+  "path": "/webhook-test/receive",
+  "headers": {
+    "host": "localhost:3000",
+    "user-agent": "curl/8.7.1",
+    "accept": "*/*",
+    "content-type": "application/json",
+    "x-webhook-signature": "sha256=test123",
+    "content-length": "248"
+  },
+  "queryParameters": {},
+  "body": {
+    "eventId": "evt_test_001",
+    "eventType": "order.created",
+    "timestamp": "2025-10-03T23:00:00Z",
+    "payload": {
+      "orderId": "ORD-TEST-001",
+      "customerId": "CUST-123",
+      "amount": 99.99,
+      "status": "created"
+    }
+  },
+  "signature": "sha256=test123",
+  "sourceIp": "::1"
+}

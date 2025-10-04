@@ -30,6 +30,12 @@ import { handler as eventPublisherHandler } from './lambda/event-publisher/index
 import { handler as eventAdminHandler } from './lambda/event-admin/index';
 import { handler as adminUserManagerHandler } from './lambda/admin-user-manager/index';
 import { handler as adminAuthHandler } from './lambda/admin-auth/index';
+import {
+  handler as webhookConsumerHandler,
+  listWebhooksHandler,
+  getWebhookHandler,
+  clearWebhooksHandler
+} from './lambda/webhook-consumer-test/index';
 
 /**
  * Convert Express request to API Gateway event
@@ -192,6 +198,70 @@ app.get('/api/v1/subscribers', async (req, res) => {
   }
 });
 
+app.patch('/api/v1/subscribers/:subscriberId', async (req, res) => {
+  // Update subscriber
+  const { subscriberId } = req.params;
+  const { name, email, webhookUrl, status } = req.body;
+
+  const { Pool } = await import('pg');
+  const pool = new Pool({
+    host: process.env.DATABASE_HOST,
+    port: parseInt(process.env.DATABASE_PORT || '5432'),
+    database: process.env.DATABASE_NAME,
+    user: process.env.DATABASE_USER,
+    password: process.env.DATABASE_PASSWORD,
+  });
+
+  try {
+    const updates = [];
+    const values = [];
+    let valueIndex = 1;
+
+    if (name !== undefined) {
+      updates.push(`name = $${valueIndex++}`);
+      values.push(name);
+    }
+    if (email !== undefined) {
+      updates.push(`email = $${valueIndex++}`);
+      values.push(email);
+    }
+    if (webhookUrl !== undefined) {
+      updates.push(`webhook_url = $${valueIndex++}`);
+      values.push(webhookUrl);
+    }
+    if (status !== undefined) {
+      updates.push(`status = $${valueIndex++}`);
+      values.push(status);
+    }
+
+    updates.push(`updated_at = CURRENT_TIMESTAMP`);
+    values.push(subscriberId);
+
+    const query = `
+      UPDATE subscribers
+      SET ${updates.join(', ')}
+      WHERE id = $${valueIndex}
+      RETURNING id, name, email, webhook_url, status, created_at, updated_at
+    `;
+
+    const result = await pool.query(query, values);
+
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: { message: 'Subscriber not found' } });
+    } else {
+      res.json({
+        success: true,
+        subscriber: result.rows[0]
+      });
+    }
+  } catch (error: any) {
+    console.error('Error updating subscriber:', error);
+    res.status(500).json({ error: { message: 'Failed to update subscriber' } });
+  } finally {
+    await pool.end();
+  }
+});
+
 // ============================================================================
 // Subscription Admin Routes
 // ============================================================================
@@ -290,6 +360,30 @@ app.delete('/api/v1/admin/users/:userId', async (req, res) => {
 });
 
 // ============================================================================
+// Webhook Consumer Test Routes
+// ============================================================================
+
+// Receive webhook (test subscriber endpoint)
+app.post('/webhook-test/receive', async (req, res) => {
+  await lambdaWrapper(webhookConsumerHandler, req, res);
+});
+
+// Get all received webhooks
+app.get('/webhook-test/webhooks', async (req, res) => {
+  await lambdaWrapper(listWebhooksHandler, req, res);
+});
+
+// Get specific webhook by requestId
+app.get('/webhook-test/webhooks/:requestId', async (req, res) => {
+  await lambdaWrapper(getWebhookHandler, req, res);
+});
+
+// Clear all webhook logs
+app.delete('/webhook-test/webhooks', async (req, res) => {
+  await lambdaWrapper(clearWebhooksHandler, req, res);
+});
+
+// ============================================================================
 // Health Check
 // ============================================================================
 
@@ -325,6 +419,12 @@ app.listen(PORT, () => {
   console.log('   POST   /api/v1/admin/users');
   console.log('   GET    /api/v1/admin/users');
   console.log('   GET    /health');
+  console.log('');
+  console.log('🧪 Test Webhook Consumer:');
+  console.log('   POST   /webhook-test/receive           (Receive webhooks)');
+  console.log('   GET    /webhook-test/webhooks          (List all webhooks)');
+  console.log('   GET    /webhook-test/webhooks/:id      (Get specific webhook)');
+  console.log('   DELETE /webhook-test/webhooks          (Clear all webhooks)');
   console.log('');
   console.log('🎉 Ready to accept requests!');
 });

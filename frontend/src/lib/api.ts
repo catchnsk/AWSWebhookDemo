@@ -195,6 +195,16 @@ export const subscriberAPI = {
     const response = await api.get('/subscribers');
     return response.data;
   },
+
+  update: async (subscriberId: string, data: {
+    name?: string;
+    email?: string;
+    webhookUrl?: string;
+    status?: string;
+  }): Promise<{ subscriber: Subscriber }> => {
+    const response = await api.patch(`/subscribers/${subscriberId}`, data);
+    return response.data;
+  },
 };
 
 // Subscription APIs

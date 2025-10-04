@@ -32,6 +32,8 @@ import {
   Search,
   ArrowLeft,
   ArrowRight,
+  Edit,
+  Settings,
 } from 'lucide-react';
 import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import toast from 'react-hot-toast';
@@ -117,6 +119,14 @@ const AdminDashboard: React.FC = () => {
   const [testEventForm, setTestEventForm] = useState({
     eventType: '',
     payload: '{\n  \n}'
+  });
+  const [showEditSubscriberModal, setShowEditSubscriberModal] = useState(false);
+  const [selectedSubscriber, setSelectedSubscriber] = useState<Subscriber | null>(null);
+  const [editSubscriberForm, setEditSubscriberForm] = useState({
+    name: '',
+    email: '',
+    webhookUrl: '',
+    status: 'active'
   });
   const [testEventResult, setTestEventResult] = useState<{
     success: boolean;
@@ -385,6 +395,31 @@ const AdminDashboard: React.FC = () => {
       loadDashboardData();
     } catch (error: any) {
       toast.error(error.response?.data?.error?.message || 'Failed to create subscription');
+    }
+  };
+
+  const handleEditSubscriberClick = (subscriber: Subscriber) => {
+    setSelectedSubscriber(subscriber);
+    setEditSubscriberForm({
+      name: subscriber.name,
+      email: subscriber.email,
+      webhookUrl: subscriber.webhookUrl || subscriber.webhook_url || '',
+      status: subscriber.status
+    });
+    setShowEditSubscriberModal(true);
+  };
+
+  const handleEditSubscriber = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSubscriber) return;
+
+    try {
+      await subscriberAPI.update(selectedSubscriber.id, editSubscriberForm);
+      toast.success('Subscriber updated successfully');
+      setShowEditSubscriberModal(false);
+      loadDashboardData();
+    } catch (error: any) {
+      toast.error(error.response?.data?.error?.message || 'Failed to update subscriber');
     }
   };
 
@@ -980,10 +1015,16 @@ const AdminDashboard: React.FC = () => {
                         )}
                       </button>
                     </div>
-                    <div className="grid grid-cols-4 gap-4 text-sm">
+                    <div className="grid grid-cols-5 gap-4 text-sm mb-3">
                       <div>
                         <p className="text-gray-600 dark:text-gray-300 font-medium">Webhook URL</p>
                         <p className="text-gray-900 dark:text-white truncate font-medium">{subscription.webhookUrl}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600 dark:text-gray-300 font-medium">Subscriber</p>
+                        <p className="text-gray-900 dark:text-white font-medium">
+                          {subscribers.find(s => s.id === subscription.subscriberId)?.name || 'N/A'}
+                        </p>
                       </div>
                       <div>
                         <p className="text-gray-600 dark:text-gray-300 font-medium">Max Retries</p>
@@ -1000,6 +1041,17 @@ const AdminDashboard: React.FC = () => {
                         </p>
                       </div>
                     </div>
+                    {(userRole === 'admin' || userRole === 'super_admin') && subscribers.find(s => s.id === subscription.subscriberId) && (
+                      <div className="flex justify-end">
+                        <button
+                          onClick={() => handleEditSubscriberClick(subscribers.find(s => s.id === subscription.subscriberId)!)}
+                          className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 dark:bg-blue-700 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 transition-all shadow-sm text-sm"
+                        >
+                          <Edit className="w-4 h-4" />
+                          Edit Subscriber
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
                 {subscriptions.length === 0 && (
@@ -2755,6 +2807,110 @@ const AdminDashboard: React.FC = () => {
                 </div>
               </form>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Subscriber Modal */}
+      {showEditSubscriberModal && selectedSubscriber && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 max-w-2xl w-full shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white">Edit Subscriber</h3>
+              <button
+                onClick={() => setShowEditSubscriberModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-all"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditSubscriber} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Name */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editSubscriberForm.name}
+                    onChange={(e) => setEditSubscriberForm({ ...editSubscriberForm, name: e.target.value })}
+                    className="w-full px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Subscriber name"
+                  />
+                </div>
+
+                {/* Email */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Email *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={editSubscriberForm.email}
+                    onChange={(e) => setEditSubscriberForm({ ...editSubscriberForm, email: e.target.value })}
+                    className="w-full px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="subscriber@example.com"
+                  />
+                </div>
+
+                {/* Webhook URL */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Webhook URL
+                  </label>
+                  <input
+                    type="url"
+                    value={editSubscriberForm.webhookUrl}
+                    onChange={(e) => setEditSubscriberForm({ ...editSubscriberForm, webhookUrl: e.target.value })}
+                    className="w-full px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="https://api.example.com/webhook"
+                  />
+                </div>
+
+                {/* Status */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Status *
+                  </label>
+                  <select
+                    value={editSubscriberForm.status}
+                    onChange={(e) => setEditSubscriberForm({ ...editSubscriberForm, status: e.target.value })}
+                    className="w-full px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="suspended">Suspended</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <p className="text-blue-900 dark:text-blue-300 text-sm">
+                  <strong>Note:</strong> Changes to subscriber details will affect all associated subscriptions.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  type="submit"
+                  className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all flex items-center justify-center gap-2 shadow-lg"
+                >
+                  <Check className="w-5 h-5" />
+                  Update Subscriber
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowEditSubscriberModal(false)}
+                  className="px-6 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
