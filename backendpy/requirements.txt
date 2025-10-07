@@ -1,0 +1,33 @@
+# Web Framework
+Flask==3.0.0
+flask-cors==4.0.0
+
+# Database
+psycopg2-binary==2.9.9
+
+# Environment Variables
+python-dotenv==1.0.0
+
+# Security
+bcrypt==4.1.2
+
+# JSON Schema Validation
+jsonschema==4.20.0
+
+# HTTP Client
+requests==2.31.0
+
+# UUID
+uuid==1.30
+
+# AWS SDK (optional, for production deployment)
+boto3==1.34.10
+
+# Kafka Client (optional)
+kafka-python==2.0.2
+
+# Development
+pytest==7.4.3
+pytest-cov==4.1.0
+black==23.12.1
+flake8==7.0.0
