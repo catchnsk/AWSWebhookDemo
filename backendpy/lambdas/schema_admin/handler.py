@@ -5,7 +5,7 @@ import os
 # Add parent directories to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
-from shared.models.schema import list_schemas, create_schema
+from shared.models.schema import list_schemas, create_schema, get_schema_by_id, update_schema
 from shared.models.producer import get_producer_by_api_key, increment_schema_registered_count
 from shared.utils.response import success_response, ErrorResponses, cors_preflight_response, paginated_response
 from shared.utils.database import query, query_one
@@ -25,10 +25,15 @@ def handler(event, context):
     try:
         http_method = event.get('httpMethod')
         path = event.get('path', '')
+        path_parameters = event.get('pathParameters') or {}
 
         # Route based on method and path
         if http_method == 'POST' and '/register' in path:
             return handle_register_schema(event)
+        elif http_method == 'PATCH' and path_parameters.get('schema_id'):
+            return handle_update_schema(event)
+        elif http_method == 'GET' and path_parameters.get('schema_id'):
+            return handle_get_schema(event)
         elif http_method == 'GET':
             return handle_list_schemas(event)
         else:
@@ -293,3 +298,141 @@ def handle_list_schemas(event):
 
     # Return success with schemas key for backward compatibility
     return success_response({**response, 'schemas': response['data']})
+
+
+def handle_get_schema(event):
+    """
+    Handle get single schema by ID
+    GET /api/v1/schemas/{schema_id}
+    """
+    # Get API key from headers
+    headers = event.get('headers', {})
+    api_key = (headers.get('X-Api-Key') or
+               headers.get('X-API-Key') or
+               headers.get('x-api-key') or
+               headers.get('X-API-KEY'))
+
+    if not api_key:
+        return ErrorResponses.unauthorized('API key is required')
+
+    # Check if admin (admin API keys start with 'wh_admin')
+    is_admin = api_key.startswith('wh_admin')
+
+    producer = None
+    if not is_admin:
+        producer = get_producer_by_api_key(api_key)
+        if not producer:
+            return ErrorResponses.unauthorized('Invalid API key')
+
+    # Get schema ID from path parameters
+    path_parameters = event.get('pathParameters') or {}
+    schema_id = path_parameters.get('schema_id')
+
+    if not schema_id:
+        return ErrorResponses.bad_request('Schema ID is required')
+
+    # Get schema from database
+    schema = get_schema_by_id(schema_id)
+
+    if not schema:
+        return ErrorResponses.not_found('Schema not found')
+
+    # Check authorization - producers can only view their own schemas
+    if producer and schema['producer_id'] != producer['id']:
+        return ErrorResponses.forbidden('You do not have permission to view this schema')
+
+    # Transform schema to match API response format
+    transformed_schema = {
+        'id': str(schema['id']),
+        'producerId': str(schema['producer_id']),
+        'producerName': schema.get('producer_name'),
+        'schemaRegistryId': schema.get('schema_registry_id'),
+        'name': schema['name'],
+        'eventType': schema['event_type'],
+        'version': schema['version'],
+        'schemaFormat': schema['schema_format'],
+        'schemaDefinition': schema.get('schema_definition'),
+        'isPublic': schema['is_public'],
+        'requiresApproval': schema['requires_approval'],
+        'compatibilityMode': schema.get('compatibility_mode'),
+        'description': schema.get('description'),
+        'documentationUrl': schema.get('documentation_url'),
+        'examplePayload': schema.get('example_payload'),
+        'subscriptionCount': int(schema.get('subscription_count', 0)),
+        'totalEventsPublished': int(schema.get('total_events_published', 0)),
+        'status': schema['status'],
+        'createdAt': str(schema['created_at']) if schema.get('created_at') else None,
+        'updatedAt': str(schema['updated_at']) if schema.get('updated_at') else None,
+        'schemaId': schema.get('schema_id'),
+        'domain': schema.get('domain'),
+        'partnerUserId': schema.get('partner_user_id'),
+        'systemUserId': schema.get('system_user_id')
+    }
+
+    return success_response({'schema': transformed_schema})
+
+
+def handle_update_schema(event):
+    """
+    Handle update schema (admin only)
+    PATCH /api/v1/admin/schemas/{schema_id}
+    """
+    # Get API key from headers
+    headers = event.get('headers', {})
+    api_key = (headers.get('X-Api-Key') or
+               headers.get('X-API-Key') or
+               headers.get('x-api-key') or
+               headers.get('X-API-KEY'))
+
+    if not api_key:
+        return ErrorResponses.unauthorized('API key is required')
+
+    # Only admins can update schemas
+    if not api_key.startswith('wh_admin'):
+        return ErrorResponses.forbidden('Only admins can update schemas')
+
+    # Get schema ID from path parameters
+    path_parameters = event.get('pathParameters') or {}
+    schema_id = path_parameters.get('schema_id')
+
+    if not schema_id:
+        return ErrorResponses.bad_request('Schema ID is required')
+
+    # Parse request body
+    body = event.get('body')
+    if not body:
+        return ErrorResponses.bad_request('Request body is required')
+
+    try:
+        if isinstance(body, str):
+            request_body = json.loads(body)
+        else:
+            request_body = body
+    except (json.JSONDecodeError, ValueError):
+        return ErrorResponses.bad_request('Invalid JSON in request body')
+
+    # Update schema
+    updated_schema = update_schema(schema_id, request_body)
+
+    if not updated_schema:
+        return ErrorResponses.not_found('Schema not found')
+
+    # Transform schema to match API response format
+    transformed_schema = {
+        'id': str(updated_schema['id']),
+        'producerId': str(updated_schema['producer_id']),
+        'schemaRegistryId': updated_schema.get('schema_registry_id'),
+        'name': updated_schema['name'],
+        'eventType': updated_schema['event_type'],
+        'version': updated_schema['version'],
+        'schemaFormat': updated_schema['schema_format'],
+        'isPublic': updated_schema['is_public'],
+        'requiresApproval': updated_schema['requires_approval'],
+        'description': updated_schema.get('description'),
+        'documentationUrl': updated_schema.get('documentation_url'),
+        'status': updated_schema['status'],
+        'createdAt': str(updated_schema['created_at']) if updated_schema.get('created_at') else None,
+        'updatedAt': str(updated_schema['updated_at']) if updated_schema.get('updated_at') else None
+    }
+
+    return success_response({'schema': transformed_schema, 'message': 'Schema updated successfully'})

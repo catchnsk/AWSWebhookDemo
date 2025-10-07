@@ -2,6 +2,106 @@ from ..utils.database import query, query_one
 import json
 
 
+def get_schema_by_id(schema_id):
+    """
+    Get a single schema by ID
+
+    Args:
+        schema_id: Schema ID
+
+    Returns:
+        Dict with schema details or None if not found
+    """
+    sql = """
+        SELECT s.*, p.name as producer_name,
+               COUNT(DISTINCT sub.id) as subscription_count,
+               COALESCE(SUM(CASE WHEN e.status = 'published' THEN 1 ELSE 0 END), 0) as total_events_published
+        FROM schemas s
+        LEFT JOIN producers p ON s.producer_id = p.id
+        LEFT JOIN subscriptions sub ON s.id = sub.schema_id
+        LEFT JOIN events e ON s.id = e.schema_id
+        WHERE s.id = %s
+        GROUP BY s.id, p.name
+    """
+
+    result = query_one(sql, (schema_id,))
+    if result:
+        schema = dict(result)
+        # Parse JSON fields
+        if schema.get('schema_definition') and isinstance(schema.get('schema_definition'), str):
+            try:
+                schema['schema_definition'] = json.loads(schema['schema_definition'])
+            except:
+                pass
+
+        if schema.get('example_payload') and isinstance(schema.get('example_payload'), str):
+            try:
+                schema['example_payload'] = json.loads(schema['example_payload'])
+            except:
+                pass
+
+        return schema
+    return None
+
+
+def update_schema(schema_id, data):
+    """
+    Update a schema
+
+    Args:
+        schema_id: Schema ID
+        data: Dict with fields to update (status, description, documentation_url, is_public, requires_approval)
+
+    Returns:
+        Dict with updated schema or None if not found
+    """
+    # Build update query dynamically based on provided fields
+    update_fields = []
+    params = []
+
+    if 'status' in data:
+        update_fields.append('status = %s')
+        params.append(data['status'])
+
+    if 'description' in data:
+        update_fields.append('description = %s')
+        params.append(data['description'])
+
+    if 'documentation_url' in data:
+        update_fields.append('documentation_url = %s')
+        params.append(data['documentation_url'])
+
+    if 'is_public' in data:
+        update_fields.append('is_public = %s')
+        params.append(data['is_public'])
+
+    if 'requires_approval' in data:
+        update_fields.append('requires_approval = %s')
+        params.append(data['requires_approval'])
+
+    if not update_fields:
+        # No fields to update, just return current schema
+        return get_schema_by_id(schema_id)
+
+    # Add updated_at
+    update_fields.append('updated_at = CURRENT_TIMESTAMP')
+
+    # Add schema_id to params
+    params.append(schema_id)
+
+    sql = f"""
+        UPDATE schemas
+        SET {', '.join(update_fields)}
+        WHERE id = %s
+        RETURNING *
+    """
+
+    result = query_one(sql, tuple(params))
+    if result:
+        return dict(result)
+    return None
+
+
 def create_schema(data):
     """
     Create a new schema in the database

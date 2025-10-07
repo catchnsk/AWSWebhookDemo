@@ -901,17 +901,12 @@ const AdminDashboard: React.FC = () => {
                             <button
                               onClick={async () => {
                                 try {
-                                  // Fetch full schema details
-                                  const response = await fetch(`http://localhost:3000/api/v1/schemas/${schema.id}`, {
-                                    headers: {
-                                      'X-API-Key': localStorage.getItem('apiKey') || ''
-                                    }
-                                  });
-                                  const result = await response.json();
+                                  // Fetch full schema details using the API client
+                                  const result = await schemaAPI.get(schema.id);
                                   console.log('Schema API response:', result);
 
                                   // The API returns data in the root level or nested in 'data'
-                                  const schemaData = result.data || result;
+                                  const schemaData = result.data?.schema || result.schema;
                                   console.log('Schema data:', schemaData);
 
                                   setSelectedSchema(schemaData);
@@ -930,14 +925,9 @@ const AdminDashboard: React.FC = () => {
                               <button
                                 onClick={async () => {
                                   try {
-                                    // Fetch full schema details for editing
-                                    const response = await fetch(`http://localhost:3000/api/v1/schemas/${schema.id}`, {
-                                      headers: {
-                                        'X-API-Key': localStorage.getItem('apiKey') || ''
-                                      }
-                                    });
-                                    const result = await response.json();
-                                    const schemaData = result.data || result;
+                                    // Fetch full schema details for editing using the API client
+                                    const result = await schemaAPI.get(schema.id);
+                                    const schemaData = result.data?.schema || result.schema;
 
                                     setSelectedSchema(schemaData);
                                     setEditSchemaForm({
@@ -2283,31 +2273,20 @@ const AdminDashboard: React.FC = () => {
                   return;
                 }
 
-                // Update schema via direct database update
-                const response = await fetch(`http://localhost:3000/api/v1/admin/schemas/${selectedSchema.id}`, {
-                  method: 'PATCH',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'X-API-Key': localStorage.getItem('apiKey') || ''
-                  },
-                  body: JSON.stringify({
-                    domain: editSchemaForm.domain || null,
-                    partnerUserId: editSchemaForm.partnerUserId || null,
-                    systemUserId: editSchemaForm.systemUserId || null,
-                    status: editSchemaForm.status,
-                    schemaDefinition: schemaDefinition,
-                    examplePayload: examplePayload
-                  })
+                // Update schema using API client
+                await schemaAPI.update(selectedSchema.id, {
+                  domain: editSchemaForm.domain || null,
+                  partnerUserId: editSchemaForm.partnerUserId || null,
+                  systemUserId: editSchemaForm.systemUserId || null,
+                  status: editSchemaForm.status,
+                  schemaDefinition: schemaDefinition,
+                  examplePayload: examplePayload
                 });
 
-                if (response.ok) {
-                  toast.success('Schema updated successfully!');
-                  setShowEditSchemaModal(false);
-                  setSelectedSchema(null);
-                  loadDashboardData();
-                } else {
-                  toast.error('Failed to update schema');
-                }
+                toast.success('Schema updated successfully!');
+                setShowEditSchemaModal(false);
+                setSelectedSchema(null);
+                loadDashboardData();
               } catch (error) {
                 console.error('Error updating schema:', error);
                 toast.error('Failed to update schema');

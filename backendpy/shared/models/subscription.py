@@ -101,3 +101,38 @@ def get_subscriber_by_api_key(api_key):
     """
     result = query_one(sql, (api_key,))
     return dict(result) if result else None
+
+
+def create_subscription(data):
+    """
+    Create a new subscription
+
+    Args:
+        data: Dict with subscription fields (subscriber_id, schema_id, webhook_url,
+              webhook_secret, max_retries, backoff_strategy, enabled)
+
+    Returns:
+        Dict with created subscription
+    """
+    sql = """
+        INSERT INTO subscriptions (
+            subscriber_id, schema_id, webhook_url, webhook_secret,
+            max_retries, backoff_strategy, enabled, auth_type, status
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING *
+    """
+
+    params = (
+        data['subscriber_id'],
+        data['schema_id'],
+        data['webhook_url'],
+        data.get('webhook_secret', ''),
+        data.get('max_retries', 3),
+        data.get('backoff_strategy', 'exponential'),
+        data.get('enabled', True),
+        data.get('auth_type', 'hmac'),
+        data.get('status', 'active')
+    )
+
+    result = query_one(sql, params)
+    return dict(result) if result else None

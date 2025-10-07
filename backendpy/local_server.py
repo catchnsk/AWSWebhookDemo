@@ -61,6 +61,7 @@ from lambdas.admin_auth.handler import handler as admin_auth_handler
 from lambdas.schema_admin.handler import handler as schema_handler
 from lambdas.subscription_admin.handler import handler as subscription_handler
 from lambdas.event_admin.handler import handler as event_handler
+from lambdas.admin_user_manager.handler import handler as admin_user_handler
 
 # Producer Onboarding Routes
 @app.route('/api/v1/producers/onboard', methods=['POST', 'OPTIONS'])
@@ -90,9 +91,15 @@ def register_schema():
     result = schema_handler(event, None)
     return lambda_to_flask_response(result)
 
+# Get single schema by ID
+@app.route('/api/v1/schemas/<schema_id>', methods=['GET', 'OPTIONS'])
+def get_schema(schema_id):
+    event = create_lambda_event(request, {'schema_id': schema_id})
+    result = schema_handler(event, None)
+    return lambda_to_flask_response(result)
+
 # Placeholder routes for other schema endpoints
 @app.route('/api/v1/schemas/marketplace', methods=['GET', 'OPTIONS'])
-@app.route('/api/v1/schemas/<schema_id>', methods=['GET', 'OPTIONS'])
 @app.route('/api/v1/schemas/<schema_id>/validate', methods=['POST', 'OPTIONS'])
 def schemas(*args, **kwargs):
     return jsonify({
@@ -140,16 +147,18 @@ def publish_event():
         }
     }), 501
 
+# Admin Users Routes
 @app.route('/api/v1/admin/users', methods=['GET', 'POST', 'OPTIONS'])
+def admin_users_list():
+    event = create_lambda_event(request)
+    result = admin_user_handler(event, None)
+    return lambda_to_flask_response(result)
+
 @app.route('/api/v1/admin/users/<user_id>', methods=['GET', 'PATCH', 'DELETE', 'OPTIONS'])
-def admin_users(*args, **kwargs):
-    return jsonify({
-        'success': False,
-        'error': {
-            'code': 'NOT_IMPLEMENTED',
-            'message': 'Admin user endpoints not yet implemented in Python backend'
-        }
-    }), 501
+def admin_users_detail(user_id):
+    event = create_lambda_event(request, {'user_id': user_id})
+    result = admin_user_handler(event, None)
+    return lambda_to_flask_response(result)
 
 @app.route('/api/v1/subscribers', methods=['GET', 'OPTIONS'])
 @app.route('/api/v1/subscribers/<subscriber_id>', methods=['PATCH', 'OPTIONS'])
@@ -163,14 +172,10 @@ def subscribers(*args, **kwargs):
     }), 501
 
 @app.route('/api/v1/admin/schemas/<schema_id>', methods=['PATCH', 'OPTIONS'])
-def admin_schemas(*args, **kwargs):
-    return jsonify({
-        'success': False,
-        'error': {
-            'code': 'NOT_IMPLEMENTED',
-            'message': 'Admin schema endpoints not yet implemented in Python backend'
-        }
-    }), 501
+def admin_update_schema(schema_id):
+    event = create_lambda_event(request, {'schema_id': schema_id})
+    result = schema_handler(event, None)
+    return lambda_to_flask_response(result)
 
 @app.route('/api/v1/deliveries/stats', methods=['GET', 'OPTIONS'])
 def delivery_stats():

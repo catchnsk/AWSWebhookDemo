@@ -5,7 +5,8 @@ import os
 # Add parent directories to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
-from shared.models.subscription import list_subscriptions, get_subscriber_by_api_key
+from shared.models.subscription import list_subscriptions, get_subscriber_by_api_key, create_subscription
+from shared.models.schema import get_schema_by_id
 from shared.utils.response import success_response, ErrorResponses, cors_preflight_response, paginated_response
 
 
@@ -22,15 +23,20 @@ def handler(event, context):
 
     try:
         http_method = event.get('httpMethod')
+        path = event.get('path', '')
 
-        # Route based on method
-        if http_method == 'GET':
+        # Route based on method and path
+        if http_method == 'POST' and '/subscribe' in path:
+            return handle_create_subscription(event)
+        elif http_method == 'GET':
             return handle_list_subscriptions(event)
         else:
             return ErrorResponses.bad_request('Method not allowed')
 
     except Exception as error:
         print(f"Error in subscription admin: {error}")
+        import traceback
+        traceback.print_exc()
         error_message = str(error) if os.environ.get('NODE_ENV') == 'development' else 'Internal server error'
         return ErrorResponses.internal_server_error(error_message)
 
@@ -127,3 +133,107 @@ def handle_list_subscriptions(event):
 
     # Return success with subscriptions key for backward compatibility
     return success_response({**response, 'subscriptions': response['data']})
+
+
+def handle_create_subscription(event):
+    """
+    Handle create subscription
+    POST /api/v1/subscriptions/subscribe
+    """
+    # Get API key from headers
+    headers = event.get('headers', {})
+    api_key = (headers.get('X-Api-Key') or
+               headers.get('X-API-Key') or
+               headers.get('x-api-key') or
+               headers.get('X-API-KEY'))
+
+    if not api_key:
+        return ErrorResponses.unauthorized('API key is required')
+
+    # Get subscriber from API key
+    subscriber = get_subscriber_by_api_key(api_key)
+    if not subscriber:
+        return ErrorResponses.unauthorized('Invalid API key')
+
+    # Parse request body
+    body = event.get('body')
+    if not body:
+        return ErrorResponses.bad_request('Request body is required')
+
+    try:
+        if isinstance(body, str):
+            request_body = json.loads(body)
+        else:
+            request_body = body
+    except (json.JSONDecodeError, ValueError):
+        return ErrorResponses.bad_request('Invalid JSON in request body')
+
+    # Validate required fields
+    schema_id = request_body.get('schemaId')
+    if not schema_id:
+        return ErrorResponses.bad_request('schemaId is required')
+
+    # Verify schema exists
+    schema = get_schema_by_id(schema_id)
+    if not schema:
+        return ErrorResponses.not_found('Schema not found')
+
+    # Check if schema is public or requires approval
+    if not schema.get('is_public') and schema.get('requires_approval'):
+        # In a full implementation, would check approval_status
+        pass
+
+    # Get webhook URL - use provided or default to subscriber's webhook URL
+    webhook_url = request_body.get('webhookUrl', subscriber.get('webhook_url'))
+    if not webhook_url:
+        return ErrorResponses.bad_request('webhookUrl is required')
+
+    # Prepare subscription data
+    subscription_data = {
+        'subscriber_id': subscriber['id'],
+        'schema_id': schema_id,
+        'webhook_url': webhook_url,
+        'webhook_secret': subscriber.get('webhook_secret', ''),
+        'max_retries': request_body.get('maxRetries', 3),
+        'backoff_strategy': request_body.get('backoffStrategy', 'exponential'),
+        'enabled': True,
+        'auth_type': 'hmac',
+        'status': 'active'
+    }
+
+    # Create subscription
+    try:
+        subscription = create_subscription(subscription_data)
+    except Exception as e:
+        print(f"Error creating subscription: {e}")
+        # Check if it's a unique constraint violation
+        if 'unique' in str(e).lower() or 'duplicate' in str(e).lower():
+            return ErrorResponses.bad_request('Subscription already exists for this schema')
+        raise
+
+    if not subscription:
+        return ErrorResponses.internal_server_error('Failed to create subscription')
+
+    # Transform to API response format
+    transformed_subscription = {
+        'id': str(subscription['id']),
+        'subscriberId': str(subscription['subscriber_id']),
+        'schemaId': str(subscription['schema_id']),
+        'webhookUrl': subscription['webhook_url'],
+        'maxRetries': int(subscription['max_retries']),
+        'backoffStrategy': subscription['backoff_strategy'],
+        'enabled': subscription['enabled'],
+        'status': subscription['status'],
+        'createdAt': str(subscription['created_at']) if subscription.get('created_at') else None,
+        'schema': {
+            'id': str(schema['id']),
+            'name': schema['name'],
+            'eventType': schema['event_type'],
+            'version': schema['version']
+        }
+    }
+
+    return success_response({
+        'subscription': transformed_subscription,
+        'message': 'Subscription created successfully'
+    })

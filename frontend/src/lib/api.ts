@@ -187,6 +187,22 @@ export const schemaAPI = {
     const response = await api.post(`/schemas/${schemaId}/validate`, { payload });
     return response.data;
   },
+
+  update: async (schemaId: string, data: {
+    status?: string;
+    description?: string;
+    documentation_url?: string;
+    is_public?: boolean;
+    requires_approval?: boolean;
+    domain?: string;
+    partnerUserId?: string;
+    systemUserId?: string;
+    schemaDefinition?: any;
+    examplePayload?: any;
+  }): Promise<{ schema: Schema; message: string }> => {
+    const response = await api.patch(`/admin/schemas/${schemaId}`, data);
+    return response.data;
+  },
 };
 
 // Subscriber APIs
