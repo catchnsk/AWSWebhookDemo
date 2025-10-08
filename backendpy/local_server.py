@@ -136,16 +136,12 @@ def list_events():
     result = event_handler(event, None)
     return lambda_to_flask_response(result)
 
-# Placeholder route for event publishing
+# Event publishing route
 @app.route('/api/v1/events/publish', methods=['POST', 'OPTIONS'])
 def publish_event():
-    return jsonify({
-        'success': False,
-        'error': {
-            'code': 'NOT_IMPLEMENTED',
-            'message': 'Event publishing endpoint not yet implemented in Python backend'
-        }
-    }), 501
+    event = create_lambda_event(request)
+    result = event_handler(event, None)
+    return lambda_to_flask_response(result)
 
 # Admin Users Routes
 @app.route('/api/v1/admin/users', methods=['GET', 'POST', 'OPTIONS'])
@@ -161,15 +157,104 @@ def admin_users_detail(user_id):
     return lambda_to_flask_response(result)
 
 @app.route('/api/v1/subscribers', methods=['GET', 'OPTIONS'])
-@app.route('/api/v1/subscribers/<subscriber_id>', methods=['PATCH', 'OPTIONS'])
-def subscribers(*args, **kwargs):
+def list_subscribers_route():
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    from shared.models.subscription import list_subscribers as get_subscribers
+
+    # Parse query parameters
+    params = request.args
+    page = int(params.get('page', '1'))
+    limit = int(params.get('limit', '20'))
+
+    # Build filters
+    filters = {}
+    if params.get('status'):
+        filters['status'] = params['status']
+    if params.get('search'):
+        filters['search'] = params['search']
+
+    # Get subscribers
+    result = get_subscribers(filters, page, limit)
+    subscribers = result['subscribers']
+    total = result['total']
+
+    # Transform to API response format
+    transformed_subscribers = []
+    for sub in subscribers:
+        transformed_subscribers.append({
+            'id': str(sub['id']),
+            'name': sub['name'],
+            'email': sub['email'],
+            'webhookUrl': sub.get('webhook_url'),
+            'status': sub['status'],
+            'createdAt': str(sub['created_at']) if sub.get('created_at') else None,
+            'updatedAt': str(sub['updated_at']) if sub.get('updated_at') else None
+        })
+
+    # Calculate pagination
+    total_pages = (total + limit - 1) // limit
+
     return jsonify({
-        'success': False,
-        'error': {
-            'code': 'NOT_IMPLEMENTED',
-            'message': 'Subscriber endpoints not yet implemented in Python backend'
+        'success': True,
+        'data': transformed_subscribers,
+        'subscribers': transformed_subscribers,
+        'pagination': {
+            'page': page,
+            'limit': limit,
+            'total': total,
+            'totalPages': total_pages
         }
-    }), 501
+    })
+
+@app.route('/api/v1/subscribers/<subscriber_id>', methods=['PATCH', 'OPTIONS'])
+def update_subscriber_route(subscriber_id):
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    from shared.models.subscription import update_subscriber
+
+    # Parse request body
+    try:
+        data = request.get_json()
+    except:
+        return jsonify({
+            'success': False,
+            'error': {
+                'code': 'INVALID_JSON',
+                'message': 'Invalid JSON in request body'
+            }
+        }), 400
+
+    # Update subscriber
+    subscriber = update_subscriber(subscriber_id, data)
+
+    if not subscriber:
+        return jsonify({
+            'success': False,
+            'error': {
+                'code': 'NOT_FOUND',
+                'message': 'Subscriber not found'
+            }
+        }), 404
+
+    # Transform to API response format
+    transformed_subscriber = {
+        'id': str(subscriber['id']),
+        'name': subscriber['name'],
+        'email': subscriber['email'],
+        'webhookUrl': subscriber.get('webhook_url'),
+        'status': subscriber['status'],
+        'createdAt': str(subscriber['created_at']) if subscriber.get('created_at') else None,
+        'updatedAt': str(subscriber['updated_at']) if subscriber.get('updated_at') else None
+    }
+
+    return jsonify({
+        'success': True,
+        'subscriber': transformed_subscriber,
+        'message': 'Subscriber updated successfully'
+    })
 
 @app.route('/api/v1/admin/schemas/<schema_id>', methods=['PATCH', 'OPTIONS'])
 def admin_update_schema(schema_id):

@@ -1,3 +1,4 @@
+// Updated to include schemaId in test event form
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
@@ -118,6 +119,7 @@ const AdminDashboard: React.FC = () => {
   });
   const [testEventForm, setTestEventForm] = useState({
     eventType: '',
+    schemaId: '',
     payload: '{\n  \n}'
   });
   const [showEditSubscriberModal, setShowEditSubscriberModal] = useState(false);
@@ -974,6 +976,32 @@ const AdminDashboard: React.FC = () => {
         {/* Subscriptions Tab */}
         {activeTab === 'subscriptions' && (
           <div className="space-y-6">
+            {/* Sub-tabs for Subscriptions/Subscribers */}
+            <div className="flex gap-4 border-b border-gray-200 dark:border-gray-700">
+              <button
+                onClick={() => setLogsSubTab('subscriptions')}
+                className={`pb-3 px-4 font-semibold transition-all ${
+                  logsSubTab === 'subscriptions' || !logsSubTab
+                    ? 'border-b-2 border-blue-600 text-blue-600 dark:text-blue-400'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                Subscriptions
+              </button>
+              <button
+                onClick={() => setLogsSubTab('subscribers')}
+                className={`pb-3 px-4 font-semibold transition-all ${
+                  logsSubTab === 'subscribers'
+                    ? 'border-b-2 border-blue-600 text-blue-600 dark:text-blue-400'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                Manage Subscribers
+              </button>
+            </div>
+
+            {/* Subscriptions List */}
+            {(!logsSubTab || logsSubTab === 'subscriptions') ? (
             <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-lg">
               <div className="space-y-4">
                 {subscriptions.map((subscription) => (
@@ -1051,6 +1079,71 @@ const AdminDashboard: React.FC = () => {
                 )}
               </div>
             </div>
+            ) : (
+              /* Subscribers Management Table */
+              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-lg">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-200 dark:border-gray-700">
+                        <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-200 font-semibold">Name</th>
+                        <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-200 font-semibold">Email</th>
+                        <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-200 font-semibold">Webhook URL</th>
+                        <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-200 font-semibold">Status</th>
+                        <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-200 font-semibold">Created</th>
+                        <th className="text-left py-3 px-4 text-gray-700 dark:text-gray-200 font-semibold">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {subscribers.map((subscriber) => (
+                        <tr key={subscriber.id} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
+                          <td className="py-4 px-4">
+                            <p className="text-gray-900 dark:text-white font-semibold">{subscriber.name}</p>
+                          </td>
+                          <td className="py-4 px-4">
+                            <p className="text-gray-700 dark:text-gray-300 font-medium">{subscriber.email}</p>
+                          </td>
+                          <td className="py-4 px-4">
+                            <p className="text-gray-700 dark:text-gray-300 font-medium truncate max-w-xs">{subscriber.webhookUrl || subscriber.webhook_url || 'N/A'}</p>
+                          </td>
+                          <td className="py-4 px-4">
+                            <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                              subscriber.status === 'active' ? 'bg-green-100 text-green-700' :
+                              subscriber.status === 'suspended' ? 'bg-red-100 text-red-700' :
+                              'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200'
+                            }`}>
+                              {subscriber.status}
+                            </span>
+                          </td>
+                          <td className="py-4 px-4">
+                            <span className="text-gray-600 dark:text-gray-300 text-sm font-medium">
+                              {subscriber.createdAt ? format(new Date(subscriber.createdAt), 'PP') : 'N/A'}
+                            </span>
+                          </td>
+                          <td className="py-4 px-4">
+                            <div className="flex items-center gap-2">
+                              {canEdit() && (
+                                <button
+                                  onClick={() => handleEditSubscriberClick(subscriber)}
+                                  className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all shadow-sm"
+                                >
+                                  Edit
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {subscribers.length === 0 && (
+                    <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                      No subscribers found
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1327,8 +1420,8 @@ const AdminDashboard: React.FC = () => {
                 e.stopPropagation();
                 setTestEventResult(null); // Clear previous results
 
-                // Validate event type
-                if (!testEventForm.eventType || testEventForm.eventType.trim() === '') {
+                // Validate event type and schema ID
+                if (!testEventForm.schemaId || !testEventForm.eventType) {
                   setTestEventResult({
                     success: false,
                     message: 'Please select an event type'
@@ -1359,6 +1452,7 @@ const AdminDashboard: React.FC = () => {
                   }
 
                   const response = await eventAPI.publish({
+                    schemaId: testEventForm.schemaId,
                     eventType: testEventForm.eventType,
                     payload,
                     idempotencyKey: `test-${Date.now()}`
@@ -1382,14 +1476,23 @@ const AdminDashboard: React.FC = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Event Type</label>
                   <select
-                    value={testEventForm.eventType}
-                    onChange={(e) => setTestEventForm({ ...testEventForm, eventType: e.target.value })}
+                    value={testEventForm.schemaId}
+                    onChange={(e) => {
+                      const selectedSchema = schemas.find(s => s.id === e.target.value);
+                      if (selectedSchema) {
+                        setTestEventForm({
+                          ...testEventForm,
+                          schemaId: selectedSchema.id,
+                          eventType: selectedSchema.eventType
+                        });
+                      }
+                    }}
                     className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     required
                   >
                     <option value="">Select an event type</option>
                     {schemas.map((schema) => (
-                      <option key={schema.id} value={schema.eventType}>
+                      <option key={schema.id} value={schema.id}>
                         {schema.eventType} (v{schema.version})
                       </option>
                     ))}

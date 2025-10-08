@@ -1,0 +1,31 @@
+{
+  "name": "User Account Events",
+  "eventType": "user.account.updated",
+  "version": "1.0.0",
+  "schemaDefinition": {
+    "type": "object",
+    "properties": {
+      "userId": {
+        "type": "string",
+        "description": "Unique user identifier"
+      },
+      "email": {
+        "type": "string",
+        "format": "email"
+      },
+      "action": {
+        "type": "string",
+        "enum": ["created", "updated", "deleted"]
+      },
+      "timestamp": {
+        "type": "string",
+        "format": "date-time"
+      }
+    },
+    "required": ["userId", "email", "action", "timestamp"]
+  },
+  "schemaFormat": "json",
+  "isPublic": true,
+  "requiresApproval": false,
+  "description": "Schema for user account lifecycle events"
+}

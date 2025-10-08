@@ -1,0 +1,24 @@
+{
+  "name": "Product Inventory Events",
+  "eventType": "product.inventory.changed",
+  "version": "1.0.0",
+  "schemaDefinition": {
+    "type": "object",
+    "properties": {
+      "productId": {
+        "type": "string"
+      },
+      "quantity": {
+        "type": "number"
+      },
+      "timestamp": {
+        "type": "string",
+        "format": "date-time"
+      }
+    },
+    "required": ["productId", "quantity", "timestamp"]
+  },
+  "schemaFormat": "json",
+  "isPublic": true,
+  "description": "Schema for product inventory updates"
+}

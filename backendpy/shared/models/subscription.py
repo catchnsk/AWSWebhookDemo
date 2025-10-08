@@ -136,3 +136,109 @@ def create_subscription(data):
 
     result = query_one(sql, params)
     return dict(result) if result else None
+
+
+def list_subscribers(filters=None, page=1, limit=20):
+    """
+    List subscribers with pagination
+
+    Args:
+        filters: Optional dict with status, search
+        page: Page number (1-indexed)
+        limit: Number of results per page
+
+    Returns:
+        Dict with 'subscribers' array and 'total' count
+    """
+    offset = (page - 1) * limit
+    conditions = []
+    params = []
+
+    if filters:
+        if filters.get('status'):
+            conditions.append("status = %s")
+            params.append(filters['status'])
+
+        if filters.get('search'):
+            conditions.append("(name ILIKE %s OR email ILIKE %s)")
+            search_term = f"%{filters['search']}%"
+            params.extend([search_term, search_term])
+
+    where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+
+    # Get total count
+    count_sql = f"SELECT COUNT(*) as total FROM subscribers {where_clause}"
+    total_result = query_one(count_sql, params)
+    total = total_result['total'] if total_result else 0
+
+    # Get paginated results
+    subscribers_sql = f"""
+        SELECT id, name, email, webhook_url, webhook_secret, status, created_at, updated_at
+        FROM subscribers
+        {where_clause}
+        ORDER BY created_at DESC
+        LIMIT %s OFFSET %s
+    """
+    params.extend([limit, offset])
+    subscribers = query(subscribers_sql, params)
+
+    return {
+        'subscribers': [dict(sub) for sub in subscribers] if subscribers else [],
+        'total': total
+    }
+
+
+def update_subscriber(subscriber_id, data):
+    """
+    Update a subscriber
+
+    Args:
+        subscriber_id: Subscriber ID
+        data: Dict with fields to update (name, email, webhookUrl, status)
+
+    Returns:
+        Dict with updated subscriber or None if not found
+    """
+    # Build update query dynamically based on provided fields
+    update_fields = []
+    params = []
+
+    if 'name' in data:
+        update_fields.append('name = %s')
+        params.append(data['name'])
+
+    if 'email' in data:
+        update_fields.append('email = %s')
+        params.append(data['email'])
+
+    if 'webhookUrl' in data or 'webhook_url' in data:
+        update_fields.append('webhook_url = %s')
+        params.append(data.get('webhookUrl') or data.get('webhook_url'))
+
+    if 'status' in data:
+        update_fields.append('status = %s')
+        params.append(data['status'])
+
+    if not update_fields:
+        # No fields to update, just return current subscriber
+        sql = "SELECT * FROM subscribers WHERE id = %s"
+        result = query_one(sql, (subscriber_id,))
+        return dict(result) if result else None
+
+    # Add updated_at
+    update_fields.append('updated_at = CURRENT_TIMESTAMP')
+
+    # Add subscriber_id to params
+    params.append(subscriber_id)
+
+    sql = f"""
+        UPDATE subscribers
+        SET {', '.join(update_fields)}
+        WHERE id = %s
+        RETURNING *
+    """
+
+    result = query_one(sql, tuple(params))
+    if result:
+        return dict(result)
+    return None

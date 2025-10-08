@@ -9,6 +9,7 @@ from shared.models.schema import list_schemas, create_schema, get_schema_by_id, 
 from shared.models.producer import get_producer_by_api_key, increment_schema_registered_count
 from shared.utils.response import success_response, ErrorResponses, cors_preflight_response, paginated_response
 from shared.utils.database import query, query_one
+from shared.utils.kafka import create_topic_for_schema
 
 
 def handler(event, context):
@@ -146,7 +147,11 @@ def handle_register_schema(event):
         if not schema:
             return ErrorResponses.internal_server_error('Failed to create schema')
 
-        # Step 3: Increment producer's schema count
+        # Step 3: Create Kafka topic for this schema
+        kafka_result = create_topic_for_schema(request_body['eventType'])
+        print(f"Kafka topic creation result: {kafka_result}")
+
+        # Step 4: Increment producer's schema count
         increment_schema_registered_count(producer['id'])
 
         # Prepare response

@@ -268,6 +268,7 @@ export const subscriptionAPI = {
 // Event APIs
 export const eventAPI = {
   publish: async (data: {
+    schemaId: string;
     eventType: string;
     payload: any;
     idempotencyKey?: string;

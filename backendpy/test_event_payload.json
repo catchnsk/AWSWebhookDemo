@@ -1,0 +1,9 @@
+{
+  "schemaId": "8b8cb16b-8220-4ed8-ab6c-2ef00e91a1b3",
+  "eventType": "test.created",
+  "payload": {
+    "message": "Test event from Python backend",
+    "timestamp": "2025-10-07T22:22:00Z",
+    "testData": "Hello from webhook system"
+  }
+}
