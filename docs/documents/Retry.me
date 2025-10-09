@@ -1,0 +1,82 @@
+Webhook Delivery Flow
+
+  1. Event Publishing
+
+  User/Producer → POST /api/v1/events/publish → Event created in DB
+  - Event is published with a schema ID and payload
+  - System finds all active subscriptions for that schema
+  - Creates delivery queue entries for each subscription
+
+  2. Delivery Queue
+
+  subscriptions table → delivery_queue table
+  - Each subscription that matches the event schema gets a delivery entry
+  - Status starts as queued
+  - Includes: event data, subscriber webhook URL, retry config
+
+  3. Webhook Worker Processing
+
+  webhook_delivery_worker.py (polls every 2 seconds)
+  The worker running in the background:
+  - Polls delivery_queue for entries ready to send (status = queued or retries due)
+  - Batches up to 10 deliveries per poll
+  - Sends HTTP POST to subscriber's webhook URL
+  - Includes HMAC signature in X-Webhook-Signature header
+
+  4. Delivery Attempt
+
+  POST https://subscriber-webhook-url.com/webhook
+  Headers:
+    X-Webhook-Signature: sha256=<hmac_hash>
+    Content-Type: application/json
+  Body:
+    {event payload}
+
+  5. Retry Logic (if delivery fails)
+
+  Backoff Strategies:
+  - Exponential (default): 1s → 2s → 4s → 8s → 16s → 32s...
+  - Linear: 5s → 10s → 15s → 20s → 25s...
+  - Fixed: 30s delay for all retries
+
+  Max Retries: Configured per subscription (default: 3)
+
+  Status Flow:
+  queued → processing → failed → retrying → ...
+                       ↓
+                     completed (success)
+                       ↓
+                     failed (max retries) → DLQ
+
+  6. Delivery Logs
+
+  Every attempt is logged in delivery_logs table:
+  - Request/response details
+  - Latency
+  - Status codes
+  - Error messages
+  - Retry attempt number
+
+  7. Dead Letter Queue (DLQ)
+
+  When max retries exceeded:
+  - Delivery moved to delivery_dlq table
+  - Can be manually retried later
+  - Useful for debugging persistent failures
+
+  8. Statistics Tracking
+
+  Updates on subscriptions and event_messages tables:
+  - total_deliveries
+  - successful_deliveries
+  - failed_deliveries
+  - Success rate calculations
+
+  Current System Status
+
+  You can check the worker status:
+  tail -f /tmp/webhook_worker.log
+
+  Or check the queue:
+  docker exec webhook-postgres psql -U webhook_user -d webhook_db -c "SELECT status, COUNT(*) FROM
+  delivery_queue GROUP BY status;"

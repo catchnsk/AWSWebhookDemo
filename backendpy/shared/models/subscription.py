@@ -103,6 +103,16 @@ def get_subscriber_by_api_key(api_key):
     return dict(result) if result else None
 
 
+def get_subscriber_by_id(subscriber_id):
+    """Get subscriber by ID"""
+    sql = """
+        SELECT * FROM subscribers
+        WHERE id = %s
+    """
+    result = query_one(sql, (subscriber_id,))
+    return dict(result) if result else None
+
+
 def create_subscription(data):
     """
     Create a new subscription
@@ -241,4 +251,53 @@ def update_subscriber(subscriber_id, data):
     result = query_one(sql, tuple(params))
     if result:
         return dict(result)
+    return None
+
+
+def create_subscriber(data):
+    """
+    Create a new subscriber
+
+    Args:
+        data: Dict with subscriber fields (name, email, webhookUrl, company, contactName, contactPhone)
+
+    Returns:
+        Dict with created subscriber
+    """
+    import secrets
+    import hashlib
+
+    # Generate API key and secret
+    api_key = f"wh_{secrets.token_hex(32)}"
+    api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
+    webhook_secret = secrets.token_hex(32)
+
+    sql = """
+        INSERT INTO subscribers (
+            name, company, email, api_key, api_key_hash, webhook_url,
+            webhook_secret, contact_name, contact_phone, auth_type, status
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING *
+    """
+
+    params = (
+        data['name'],
+        data.get('company', ''),
+        data['email'],
+        api_key,
+        api_key_hash,
+        data['webhookUrl'],
+        webhook_secret,
+        data.get('contactName', ''),
+        data.get('contactPhone', ''),
+        data.get('authType', 'hmac'),
+        data.get('status', 'active')
+    )
+
+    result = query_one(sql, params)
+    if result:
+        subscriber = dict(result)
+        # Include the plain API key in response (only time it's shown)
+        subscriber['api_key_plain'] = api_key
+        return subscriber
     return None

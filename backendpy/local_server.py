@@ -119,15 +119,18 @@ def list_subscriptions():
 
 # Placeholder routes for other subscription endpoints
 @app.route('/api/v1/subscriptions/subscribe', methods=['POST', 'OPTIONS'])
+def create_subscription_route():
+    from lambdas.subscription_admin.handler import handler as subscription_handler
+    event = create_lambda_event(request)
+    result = subscription_handler(event, None)
+    return lambda_to_flask_response(result)
+
 @app.route('/api/v1/subscriptions/<subscription_id>', methods=['GET', 'PATCH', 'DELETE', 'OPTIONS'])
-def subscriptions(*args, **kwargs):
-    return jsonify({
-        'success': False,
-        'error': {
-            'code': 'NOT_IMPLEMENTED',
-            'message': 'Subscription endpoints not yet implemented in Python backend'
-        }
-    }), 501
+def subscription_detail(subscription_id):
+    from lambdas.subscription_admin.handler import handler as subscription_handler
+    event = create_lambda_event(request, {'subscription_id': subscription_id})
+    result = subscription_handler(event, None)
+    return lambda_to_flask_response(result)
 
 # Event Routes
 @app.route('/api/v1/events', methods=['GET', 'OPTIONS'])
@@ -156,11 +159,53 @@ def admin_users_detail(user_id):
     result = admin_user_handler(event, None)
     return lambda_to_flask_response(result)
 
-@app.route('/api/v1/subscribers', methods=['GET', 'OPTIONS'])
-def list_subscribers_route():
+@app.route('/api/v1/subscribers', methods=['GET', 'POST', 'OPTIONS'])
+def subscribers_route():
     if request.method == 'OPTIONS':
         return '', 204
 
+    if request.method == 'POST':
+        from shared.models.subscription import create_subscriber
+
+        # Parse request body
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'Request body is required'}), 400
+
+        # Validate required fields
+        required_fields = ['name', 'email', 'webhookUrl']
+        for field in required_fields:
+            if not data.get(field):
+                return jsonify({'success': False, 'error': f'{field} is required'}), 400
+
+        # Create subscriber
+        try:
+            subscriber = create_subscriber(data)
+            if not subscriber:
+                return jsonify({'success': False, 'error': 'Failed to create subscriber'}), 500
+
+            # Transform to API response format
+            response_data = {
+                'id': str(subscriber['id']),
+                'name': subscriber['name'],
+                'company': subscriber.get('company', ''),
+                'email': subscriber['email'],
+                'apiKey': subscriber.get('api_key_plain'),  # Only time the API key is shown
+                'webhookUrl': subscriber['webhook_url'],
+                'webhookSecret': subscriber['webhook_secret'],
+                'status': subscriber['status'],
+                'createdAt': str(subscriber['created_at']) if subscriber.get('created_at') else None
+            }
+
+            return jsonify({'success': True, 'subscriber': response_data}), 201
+
+        except Exception as e:
+            print(f"Error creating subscriber: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    # GET request - list subscribers
     from shared.models.subscription import list_subscribers as get_subscribers
 
     # Parse query parameters

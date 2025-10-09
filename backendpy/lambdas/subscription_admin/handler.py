@@ -150,10 +150,15 @@ def handle_create_subscription(event):
     if not api_key:
         return ErrorResponses.unauthorized('API key is required')
 
-    # Get subscriber from API key
-    subscriber = get_subscriber_by_api_key(api_key)
-    if not subscriber:
-        return ErrorResponses.unauthorized('Invalid API key')
+    # Check if admin (admin API keys start with 'wh_admin')
+    is_admin = api_key.startswith('wh_admin')
+
+    # Get subscriber - either from API key (for subscribers) or from request body (for admins)
+    subscriber = None
+    if not is_admin:
+        subscriber = get_subscriber_by_api_key(api_key)
+        if not subscriber:
+            return ErrorResponses.unauthorized('Invalid API key')
 
     # Parse request body
     body = event.get('body')
@@ -172,6 +177,18 @@ def handle_create_subscription(event):
     schema_id = request_body.get('schemaId')
     if not schema_id:
         return ErrorResponses.bad_request('schemaId is required')
+
+    # For admin requests, get subscriberId from request body
+    if is_admin:
+        subscriber_id = request_body.get('subscriberId')
+        if not subscriber_id:
+            return ErrorResponses.bad_request('subscriberId is required for admin requests')
+
+        # Get subscriber by ID
+        from shared.models.subscription import get_subscriber_by_id
+        subscriber = get_subscriber_by_id(subscriber_id)
+        if not subscriber:
+            return ErrorResponses.not_found('Subscriber not found')
 
     # Verify schema exists
     schema = get_schema_by_id(schema_id)
