@@ -80,3 +80,106 @@ Webhook Delivery Flow
   Or check the queue:
   docker exec webhook-postgres psql -U webhook_user -d webhook_db -c "SELECT status, COUNT(*) FROM
   delivery_queue GROUP BY status;"
+
+
+
+
+  Current Design: Long-running Worker Process
+
+    Pros:
+    - ✅ Simple, straightforward implementation
+    - ✅ Low latency - polls every 2s, quick delivery
+    - ✅ Good for development/testing
+    - ✅ Predictable costs (just server resources)
+    - ✅ Easy to debug with logs
+    - ✅ No cold starts
+
+    Cons:
+    - ❌ Must run continuously (uses resources even when idle)
+    - ❌ Single point of failure
+    - ❌ Manual scaling needed for high volume
+    - ❌ Requires process management (systemd, PM2, etc.)
+    - ❌ Server needs to stay up 24/7
+
+    Lambda-based Worker Design
+
+    Pros:
+    - ✅ Auto-scaling - handles traffic spikes automatically
+    - ✅ Event-driven - only runs when needed
+    - ✅ Cost-efficient at low volumes (pay per execution)
+    - ✅ No server management - fully serverless
+    - ✅ Built-in retry/DLQ - AWS handles failures
+    - ✅ High availability - AWS manages redundancy
+
+    Cons:
+    - ❌ Cold starts (100-1000ms delay for first invocation)
+    - ❌ 15-minute max timeout (might need to batch carefully)
+    - ❌ More complex architecture (triggers, queues, IAM roles)
+    - ❌ Cost at high volume can be higher than dedicated servers
+    - ❌ Vendor lock-in to AWS
+    - ❌ Harder to debug (distributed logs, no local testing)
+
+    Recommended Hybrid Architecture
+
+    For a production webhook system, I'd suggest both approaches working together:
+
+    Architecture 1: SQS + Lambda (Recommended for AWS)
+
+    Event Published → SQS Queue → Lambda Function → HTTP Webhook
+                          ↓
+                      DLQ for failures
+
+    How it works:
+    1. When event published → Create SQS message per subscription
+    2. SQS triggers Lambda function (batch of 10)
+    3. Lambda sends webhooks in parallel
+    4. Failed deliveries → SQS visibility timeout (auto-retry)
+    5. Max retries exceeded → Move to DLQ
+
+    Benefits:
+    - Serverless, scales to 1000s of concurrent executions
+    - SQS handles retry logic built-in
+    - Lambda timeout = 15 min (enough for slow webhooks)
+    - Dead Letter Queue for failed deliveries
+
+    Architecture 2: EventBridge + Step Functions (Advanced)
+
+    Event → EventBridge → Step Function → Lambda (with retries)
+    - More sophisticated orchestration
+    - Built-in retry with exponential backoff
+    - Better observability
+    - Higher cost
+
+    Architecture 3: Keep Current + Add Lambda for Bursts
+
+    Normal load → Python worker (polls DB)
+    High load/bursts → Also trigger Lambda via SNS/SQS
+    - Hybrid: Cost-efficient baseline + burst capacity
+    - Best of both worlds
+
+    My Recommendation
+
+    For your current stage (development/MVP):
+    Keep the Python worker - it's simple and works well.
+
+    For production (scale > 1000 webhooks/hour):
+    Migrate to SQS + Lambda because:
+    1. Auto-scaling handles traffic spikes (Black Friday, viral events)
+    2. Cost-effective - only pay when webhooks are sent
+    3. Reliable - AWS manages retries, failures, DLQ
+    4. Less maintenance - no servers to manage
+
+    Migration path:
+    1. Current: Python worker ✓ (you are here)
+    2. Add SQS queue to delivery_queue writes
+    3. Add Lambda function that processes SQS messages
+    4. Run both in parallel initially
+    5. Turn off Python worker when Lambda proven stable
+
+    Would you like me to:
+
+    1. Implement the SQS + Lambda version alongside your current worker?
+    2. Keep the Python worker and optimize it (add concurrency, better error handling)?
+    3. Show you the code for what a Lambda-based delivery function would look like?
+
+    What's your priority: simplicity, cost, or scale?
