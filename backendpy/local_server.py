@@ -146,6 +146,14 @@ def publish_event():
     result = event_handler(event, None)
     return lambda_to_flask_response(result)
 
+# Webhook Listener Route (for testing webhook deliveries)
+@app.route('/api/v1/webhook/test', methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])
+def webhook_listener_route():
+    from lambdas.webhook_listener.handler import handler as webhook_listener_handler
+    event = create_lambda_event(request)
+    result = webhook_listener_handler(event, None)
+    return lambda_to_flask_response(result)
+
 # Admin Users Routes
 @app.route('/api/v1/admin/users', methods=['GET', 'POST', 'OPTIONS'])
 def admin_users_list():
@@ -347,7 +355,10 @@ if __name__ == '__main__':
     print('   GET    /api/v1/schemas')
     print('   POST   /api/v1/schemas/register')
     print('   GET    /api/v1/subscriptions')
+    print('   POST   /api/v1/subscriptions/subscribe')
     print('   GET    /api/v1/events')
+    print('   POST   /api/v1/events/publish')
+    print('   ALL    /api/v1/webhook/test  (test webhook endpoint)')
     print('   GET    /health')
     print('')
     print('Note: Other endpoints return 501 Not Implemented')

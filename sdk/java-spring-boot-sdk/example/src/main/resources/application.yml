@@ -1,0 +1,70 @@
+spring:
+  application:
+    name: webhook-sdk-example
+
+# Webhook SDK Configuration
+webhook:
+  sdk:
+    # Base URL of the Webhook Management System API
+    # Development: http://localhost:3005
+    # Production: https://api.webhook.yourdomain.com
+    base-url: ${WEBHOOK_API_URL:http://localhost:3005}
+
+    # Producer API Key for authentication
+    # This should be stored securely in environment variables or secrets management
+    api-key: ${WEBHOOK_API_KEY:your-api-key-here}
+
+    # Optional Producer ID for tracking (auto-generated if not provided)
+    producer-id: ${WEBHOOK_PRODUCER_ID:example-app-producer}
+
+    # Connection timeout in milliseconds (default: 5000)
+    connect-timeout: 5000
+
+    # Read timeout in milliseconds (default: 30000)
+    read-timeout: 30000
+
+    # Maximum retry attempts for failed requests (default: 3)
+    max-retries: 3
+
+    # Enable/disable async publishing (default: true)
+    async-enabled: true
+
+    # Thread pool size for async operations (default: 10)
+    async-thread-pool-size: 10
+
+    # Enable/disable request logging (default: true)
+    logging-enabled: true
+
+# Server Configuration
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /api
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO
+    com.webhook.sdk: DEBUG
+    com.webhook.sdk.example: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# Spring Boot Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+# Application-specific Configuration
+app:
+  example:
+    # Enable demo mode with auto-publishing
+    demo-mode: ${DEMO_MODE:false}
+    # Interval for demo events in seconds
+    demo-interval: 30
