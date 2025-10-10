@@ -1,0 +1,60 @@
+name: Deploy to Prod (AWS Lambda + API GW)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install backend requirements
+        working-directory: backendpy
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -t build_layer
+
+      - name: Zip Lambda artifact
+        working-directory: backendpy
+        run: |
+          zip -r api_lambda.zip lambda_handler.py app.py shared lambdas -x "**/__pycache__/**"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        working-directory: infra/terraform
+        run: terraform init -input=false
+
+      - name: Terraform Plan
+        working-directory: infra/terraform
+        run: terraform plan -input=false -out=tfplan
+
+      - name: Terraform Apply (needs approval)
+        if: github.event_name == 'workflow_dispatch'
+        working-directory: infra/terraform
+        run: terraform apply -input=false -auto-approve tfplan
+
+      - name: Placeholder - Update Lambda code
+        run: echo "Update Lambda functions via Terraform or separate step"
+
+

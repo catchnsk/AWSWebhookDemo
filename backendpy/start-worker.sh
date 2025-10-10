@@ -1,4 +1,4 @@
-#!/bin/bash
+1#!/bin/bash
 
 # Webhook Delivery Worker Startup Script
 # Usage: ./start-worker.sh
