@@ -1,0 +1,58 @@
+services:
+  # PostgreSQL Database
+  - type: pserv
+    name: webhook-db
+    plan: free
+    databaseName: webhook_db
+    user: webhook_user
+
+  # Python Backend API
+  - type: web
+    name: webhook-backend
+    runtime: python
+    plan: free  # Change to 'starter' for $7/month (no cold starts)
+    buildCommand: cd backendpy && pip install -r requirements.txt
+    startCommand: cd backendpy && gunicorn -w 2 -b 0.0.0.0:$PORT local_server:app
+    envVars:
+      - key: DATABASE_HOST
+        fromDatabase:
+          name: webhook-db
+          property: host
+      - key: DATABASE_PORT
+        fromDatabase:
+          name: webhook-db
+          property: port
+      - key: DATABASE_NAME
+        fromDatabase:
+          name: webhook-db
+          property: database
+      - key: DATABASE_USER
+        fromDatabase:
+          name: webhook-db
+          property: user
+      - key: DATABASE_PASSWORD
+        fromDatabase:
+          name: webhook-db
+          property: password
+      - key: NODE_ENV
+        value: production
+      - key: FRONTEND_URL
+        value: https://webhook-frontend.onrender.com
+      - key: EMAIL_MODE
+        value: console
+      - key: API_PORT
+        value: "10000"
+
+  # React Frontend
+  - type: web
+    name: webhook-frontend
+    runtime: static
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: frontend/dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://webhook-backend.onrender.com
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
