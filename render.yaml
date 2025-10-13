@@ -9,10 +9,11 @@ services:
   # Python Backend API
   - type: web
     name: webhook-backend
-    runtime: python
+    env: python
     plan: free  # Change to 'starter' for $7/month (no cold starts)
-    buildCommand: cd backendpy && pip install -r requirements.txt
-    startCommand: cd backendpy && gunicorn -w 2 -b 0.0.0.0:$PORT local_server:app
+    rootDir: backendpy
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -w 2 -b 0.0.0.0:$PORT local_server:app
     envVars:
       - key: DATABASE_HOST
         fromDatabase:
@@ -46,9 +47,10 @@ services:
   # React Frontend
   - type: web
     name: webhook-frontend
-    runtime: static
-    buildCommand: cd frontend && npm install && npm run build
-    staticPublishPath: frontend/dist
+    env: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
         value: https://webhook-backend.onrender.com
