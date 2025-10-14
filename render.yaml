@@ -12,6 +12,7 @@ services:
     env: python
     plan: free  # Change to 'starter' for $7/month (no cold starts)
     rootDir: backendpy
+    runtime: python-3.11.9
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn -w 2 -b 0.0.0.0:$PORT local_server:app
     envVars:
