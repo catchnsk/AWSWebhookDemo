@@ -18,8 +18,6 @@ import {
   X,
   Code,
   Clock,
-  ChevronDown,
-  ChevronUp,
   Activity,
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -149,7 +147,15 @@ const ProducerDashboard: React.FC = () => {
         return;
       }
 
+      // Find the schema ID from the selected event type
+      const selectedSchema = schemas.find(s => s.eventType === publishForm.eventType);
+      if (!selectedSchema) {
+        toast.error('Schema not found for selected event type');
+        return;
+      }
+
       const result = await eventAPI.publish({
+        schemaId: selectedSchema.id,
         eventType: publishForm.eventType,
         payload,
         idempotencyKey: publishForm.idempotencyKey || undefined,

@@ -28,10 +28,10 @@ export const useAuthStore = create<AuthState>()(
           const result = await adminAuthAPI.login({ email, password });
           set({
             apiKey: result.apiKey,
-            userType: 'admin',
+            userType: 'admin' as const,
             userId: result.user.id,
             userName: result.user.name,
-            userRole: result.user.role
+            userRole: result.user.role as 'super_admin' | 'admin' | 'viewer' | 'tester' | 'rtb'
           });
           localStorage.setItem('apiKey', result.apiKey);
         } catch (error: any) {

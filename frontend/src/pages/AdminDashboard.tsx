@@ -34,7 +34,6 @@ import {
   ArrowLeft,
   ArrowRight,
   Edit,
-  Settings,
 } from 'lucide-react';
 import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import toast from 'react-hot-toast';
@@ -139,7 +138,7 @@ const AdminDashboard: React.FC = () => {
   const [schemaSearchQuery, setSchemaSearchQuery] = useState('');
   const [showNewSchemaModal, setShowNewSchemaModal] = useState(false);
   const [schemaRegistrationStep, setSchemaRegistrationStep] = useState(1);
-  const [logsSubTab, setLogsSubTab] = useState<'delivery' | 'event'>('delivery');
+  const [logsSubTab, setLogsSubTab] = useState<'delivery' | 'event' | 'subscriptions' | 'subscribers'>('delivery');
 
   // Mock data for charts - with realistic trends
   const [eventsOverTime] = useState([
@@ -365,7 +364,11 @@ const AdminDashboard: React.FC = () => {
         schemaDefinition: '{\n  "type": "object",\n  "properties": {\n    \n  }\n}',
         description: '',
         isPublic: true,
-        examplePayload: ''
+        examplePayload: '',
+        schemaId: '',
+        domain: '' as 'payment' | 'account' | 'apply' | '',
+        partnerUserId: '',
+        systemUserId: ''
       });
       setShowAddSchemaModal(false);
       loadDashboardData();
@@ -907,8 +910,8 @@ const AdminDashboard: React.FC = () => {
                                   const result = await schemaAPI.get(schema.id);
                                   console.log('Schema API response:', result);
 
-                                  // The API returns data in the root level or nested in 'data'
-                                  const schemaData = result.data?.schema || result.schema;
+                                  // The API returns data in the root level
+                                  const schemaData = result.schema;
                                   console.log('Schema data:', schemaData);
 
                                   setSelectedSchema(schemaData);
@@ -929,14 +932,14 @@ const AdminDashboard: React.FC = () => {
                                   try {
                                     // Fetch full schema details for editing using the API client
                                     const result = await schemaAPI.get(schema.id);
-                                    const schemaData = result.data?.schema || result.schema;
+                                    const schemaData = result.schema;
 
                                     setSelectedSchema(schemaData);
                                     setEditSchemaForm({
                                       domain: schemaData.domain || '',
                                       partnerUserId: schemaData.partnerUserId || '',
                                       systemUserId: schemaData.systemUserId || '',
-                                      status: schemaData.status || 'active',
+                                      status: (schemaData.status || 'active') as 'active' | 'deprecated' | 'disabled',
                                       schemaDefinition: typeof schemaData.schemaDefinition === 'string'
                                         ? schemaData.schemaDefinition
                                         : JSON.stringify(schemaData.schemaDefinition, null, 2),
@@ -1561,6 +1564,7 @@ const AdminDashboard: React.FC = () => {
                       e.preventDefault();
                       setTestEventForm({
                         eventType: '',
+                        schemaId: '',
                         payload: '{\n  \n}'
                       });
                       setTestEventResult(null);
@@ -2062,7 +2066,11 @@ const AdminDashboard: React.FC = () => {
                       schemaDefinition: '{\n  "type": "object",\n  "properties": {\n    \n  }\n}',
                       description: '',
                       isPublic: true,
-                      examplePayload: ''
+                      examplePayload: '',
+                      schemaId: '',
+                      domain: '' as 'payment' | 'account' | 'apply' | '',
+                      partnerUserId: '',
+                      systemUserId: ''
                     });
                   }}
                   className="px-6 py-3 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-all"
@@ -2378,9 +2386,9 @@ const AdminDashboard: React.FC = () => {
 
                 // Update schema using API client
                 await schemaAPI.update(selectedSchema.id, {
-                  domain: editSchemaForm.domain || null,
-                  partnerUserId: editSchemaForm.partnerUserId || null,
-                  systemUserId: editSchemaForm.systemUserId || null,
+                  domain: editSchemaForm.domain || undefined,
+                  partnerUserId: editSchemaForm.partnerUserId || undefined,
+                  systemUserId: editSchemaForm.systemUserId || undefined,
                   status: editSchemaForm.status,
                   schemaDefinition: schemaDefinition,
                   examplePayload: examplePayload
@@ -2604,7 +2612,7 @@ const AdminDashboard: React.FC = () => {
                   setSchemaRegistrationStep(schemaRegistrationStep + 1);
                 } else {
                   try {
-                    const response = await schemaAPI.register({
+                    await schemaAPI.register({
                       name: newSchemaForm.name,
                       eventType: newSchemaForm.eventType,
                       version: newSchemaForm.version,
@@ -2618,7 +2626,7 @@ const AdminDashboard: React.FC = () => {
                     });
                     toast.success('Schema registered successfully!');
                     setShowNewSchemaModal(false);
-                    fetchSchemas();
+                    loadDashboardData();
                   } catch (error: any) {
                     toast.error(error.response?.data?.error || 'Failed to register schema');
                   }
