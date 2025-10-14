@@ -61,31 +61,58 @@ git push -u origin main
 
 ## Step 2: Deploy on Render.com
 
-### A. Create Account & Connect GitHub
-1. Go to https://render.com
-2. Sign up with GitHub
-3. Authorize Render to access your repo
+### A. Create PostgreSQL Database
+1. Go to https://render.com and sign in
+2. Click "New" → "PostgreSQL"
+3. Configure:
+   - **Name**: webhook-db
+   - **Database**: webhook_db
+   - **User**: webhook_user
+   - **Region**: Choose closest to you
+   - **Plan**: Free
+4. Click "Create Database"
+5. **Save the connection info** (you'll need it)
 
-### B. Create New Blueprint
-1. Click "New" → "Blueprint"
-2. Select your GitHub repo
-3. Render will detect `render.yaml` automatically
-4. Click "Apply"
+### B. Deploy Python Backend
+1. Click "New" → "Web Service"
+2. Connect your GitHub repo
+3. Configure:
+   - **Name**: webhook-backend
+   - **Region**: Same as database
+   - **Branch**: main (or your branch name)
+   - **Root Directory**: `backendpy`
+   - **Runtime**: Python 3
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `gunicorn -w 2 -b 0.0.0.0:$PORT local_server:app`
+   - **Plan**: Free
+4. Add Environment Variables:
+   - `DATABASE_HOST` - from database connection string
+   - `DATABASE_PORT` - from database (usually 5432)
+   - `DATABASE_NAME` - webhook_db
+   - `DATABASE_USER` - from database
+   - `DATABASE_PASSWORD` - from database
+   - `NODE_ENV` - production
+   - `EMAIL_MODE` - console
+   - `FRONTEND_URL` - https://your-frontend-name.onrender.com (you'll update this after frontend deploy)
+5. Click "Create Web Service"
 
-### C. Configure Environment Variables (Optional)
-Render will auto-configure database connection. You can add:
-- `SMTP_HOST` - for email (optional)
-- `SMTP_PORT` - 587
-- `SMTP_USER` - your SMTP username
-- `SMTP_PASSWORD` - your SMTP password
+### C. Deploy React Frontend
+1. Click "New" → "Static Site"
+2. Connect your GitHub repo
+3. Configure:
+   - **Name**: webhook-frontend
+   - **Branch**: main
+   - **Root Directory**: `frontend`
+   - **Build Command**: `npm install && npm run build`
+   - **Publish Directory**: `dist`
+4. Add Environment Variable:
+   - `VITE_API_URL` - https://webhook-backend.onrender.com (your backend URL)
+5. Click "Create Static Site"
 
-### D. Deploy
-- Render will automatically:
-  - Create PostgreSQL database
-  - Deploy Python backend
-  - Deploy React frontend
-  - Set up SSL certificates
-  - Configure custom domains (if added)
+### D. Update Backend FRONTEND_URL
+1. Go back to your backend service
+2. Update the `FRONTEND_URL` environment variable with your actual frontend URL
+3. Click "Save Changes" (this will redeploy)
 
 ---
 
