@@ -212,7 +212,102 @@ def handle_update_user(event):
     Handle update admin user
     PATCH /api/v1/admin/users/{user_id}
     """
-    return ErrorResponses.not_found('Not implemented')
+    import bcrypt
+
+    # Get API key from headers - only admins can access
+    headers = event.get('headers', {})
+    api_key = (headers.get('X-Api-Key') or
+               headers.get('X-API-Key') or
+               headers.get('x-api-key'))
+
+    if not api_key or not api_key.startswith('wh_admin'):
+        return ErrorResponses.unauthorized('Admin access required')
+
+    # Get user_id from path parameters
+    path_parameters = event.get('pathParameters') or {}
+    user_id = path_parameters.get('user_id')
+
+    if not user_id:
+        return ErrorResponses.bad_request('User ID is required')
+
+    # Parse request body
+    try:
+        body = json.loads(event.get('body', '{}'))
+    except json.JSONDecodeError:
+        return ErrorResponses.bad_request('Invalid JSON in request body')
+
+    # Build update query dynamically
+    update_fields = []
+    update_values = []
+
+    if 'name' in body:
+        update_fields.append("name = %s")
+        update_values.append(body['name'])
+
+    if 'email' in body:
+        # Check if email already exists for another user
+        existing_user = query_one(
+            "SELECT id FROM admins WHERE email = %s AND id != %s",
+            (body['email'], user_id)
+        )
+        if existing_user:
+            return ErrorResponses.bad_request('Email already exists')
+        update_fields.append("email = %s")
+        update_values.append(body['email'])
+
+    if 'role' in body:
+        valid_roles = ['super_admin', 'admin', 'viewer', 'tester', 'rtb']
+        if body['role'] not in valid_roles:
+            return ErrorResponses.bad_request(f'Invalid role. Must be one of: {", ".join(valid_roles)}')
+        update_fields.append("role = %s")
+        update_values.append(body['role'])
+
+    if 'status' in body:
+        valid_statuses = ['active', 'inactive', 'suspended']
+        if body['status'] not in valid_statuses:
+            return ErrorResponses.bad_request(f'Invalid status. Must be one of: {", ".join(valid_statuses)}')
+        update_fields.append("status = %s")
+        update_values.append(body['status'])
+
+    if 'password' in body:
+        password_hash = bcrypt.hashpw(body['password'].encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        update_fields.append("password_hash = %s")
+        update_values.append(password_hash)
+
+    if not update_fields:
+        return ErrorResponses.bad_request('No fields to update')
+
+    # Add updated_at
+    update_fields.append("updated_at = CURRENT_TIMESTAMP")
+
+    # Add user_id to values
+    update_values.append(user_id)
+
+    # Execute update
+    update_sql = f"""
+        UPDATE admins
+        SET {', '.join(update_fields)}
+        WHERE id = %s
+        RETURNING id, name, email, role, status, created_at, updated_at
+    """
+
+    result = query_one(update_sql, tuple(update_values))
+
+    if not result:
+        return ErrorResponses.not_found('User not found')
+
+    # Return updated user
+    response_data = {
+        'id': str(result['id']),
+        'name': result['name'],
+        'email': result['email'],
+        'role': result['role'],
+        'status': result['status'],
+        'createdAt': str(result['created_at']),
+        'updatedAt': str(result['updated_at'])
+    }
+
+    return success_response(response_data)
 
 
 def handle_delete_user(event):
@@ -220,4 +315,29 @@ def handle_delete_user(event):
     Handle delete admin user
     DELETE /api/v1/admin/users/{user_id}
     """
-    return ErrorResponses.not_found('Not implemented')
+    # Get API key from headers - only admins can access
+    headers = event.get('headers', {})
+    api_key = (headers.get('X-Api-Key') or
+               headers.get('X-API-Key') or
+               headers.get('x-api-key'))
+
+    if not api_key or not api_key.startswith('wh_admin'):
+        return ErrorResponses.unauthorized('Admin access required')
+
+    # Get user_id from path parameters
+    path_parameters = event.get('pathParameters') or {}
+    user_id = path_parameters.get('user_id')
+
+    if not user_id:
+        return ErrorResponses.bad_request('User ID is required')
+
+    # Check if user exists
+    existing_user = query_one("SELECT id FROM admins WHERE id = %s", (user_id,))
+    if not existing_user:
+        return ErrorResponses.not_found('User not found')
+
+    # Delete user
+    delete_sql = "DELETE FROM admins WHERE id = %s"
+    query(delete_sql, (user_id,))
+
+    return success_response({'message': 'User deleted successfully'})
