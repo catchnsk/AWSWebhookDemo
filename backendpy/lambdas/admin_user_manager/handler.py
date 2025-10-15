@@ -134,7 +134,77 @@ def handle_create_user(event):
     Handle create admin user
     POST /api/v1/admin/users
     """
-    return ErrorResponses.not_found('Not implemented')
+    import bcrypt
+    import uuid
+
+    # Get API key from headers - only admins can access
+    headers = event.get('headers', {})
+    api_key = (headers.get('X-Api-Key') or
+               headers.get('X-API-Key') or
+               headers.get('x-api-key'))
+
+    if not api_key or not api_key.startswith('wh_admin'):
+        return ErrorResponses.unauthorized('Admin access required')
+
+    # Parse request body
+    try:
+        body = json.loads(event.get('body', '{}'))
+    except json.JSONDecodeError:
+        return ErrorResponses.bad_request('Invalid JSON in request body')
+
+    # Validate required fields
+    name = body.get('name')
+    email = body.get('email')
+    password = body.get('password')
+    role = body.get('role', 'admin')
+
+    if not all([name, email, password]):
+        return ErrorResponses.bad_request('Name, email, and password are required')
+
+    # Validate role
+    valid_roles = ['super_admin', 'admin', 'viewer', 'tester', 'rtb']
+    if role not in valid_roles:
+        return ErrorResponses.bad_request(f'Invalid role. Must be one of: {", ".join(valid_roles)}')
+
+    # Check if email already exists
+    existing_user = query_one("SELECT id FROM admins WHERE email = %s", (email,))
+    if existing_user:
+        return ErrorResponses.bad_request('Email already exists')
+
+    # Hash password
+    password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+    # Generate API key
+    import hashlib
+    import secrets
+    admin_id = str(uuid.uuid4())
+    api_key_plain = f"wh_admin_{secrets.token_hex(32)}"
+    api_key_hash = hashlib.sha256(api_key_plain.encode()).hexdigest()
+
+    # Insert admin user
+    insert_sql = """
+        INSERT INTO admins (id, name, email, password_hash, api_key, api_key_hash, role, status)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, 'active')
+        RETURNING id, name, email, role, status, created_at
+    """
+
+    result = query_one(insert_sql, (admin_id, name, email, password_hash, api_key_plain, api_key_hash, role))
+
+    if not result:
+        return ErrorResponses.internal_server_error('Failed to create admin user')
+
+    # Return created user with API key (only time it's shown)
+    response_data = {
+        'id': str(result['id']),
+        'name': result['name'],
+        'email': result['email'],
+        'role': result['role'],
+        'status': result['status'],
+        'apiKey': api_key_plain,  # Only shown once
+        'createdAt': str(result['created_at'])
+    }
+
+    return success_response(response_data, 201)
 
 
 def handle_update_user(event):
